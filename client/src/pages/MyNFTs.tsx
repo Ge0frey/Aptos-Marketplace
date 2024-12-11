@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Typography, Card, Row, Col, Pagination, message, Button, Input, Modal } from "antd";
+import { Typography, Card, Row, Col, Pagination, message, Button, Input, Modal, Spin } from "antd";
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 
@@ -29,8 +29,10 @@ const MyNFTs: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
   const [salePrice, setSalePrice] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   const fetchUserNFTs = useCallback(async () => {
+    setLoading(true);
     if (!account) return;
 
     try {
@@ -102,6 +104,8 @@ const MyNFTs: React.FC = () => {
     } catch (error) {
       console.error("Error fetching NFTs:", error);
       message.error("Failed to fetch your NFTs.");
+    } finally {
+      setLoading(false);
     }
   }, [account, marketplaceAddr]);
 
@@ -161,92 +165,100 @@ const MyNFTs: React.FC = () => {
       <Title level={2} style={{ marginBottom: "20px" }}>My Collection</Title>
       <p>Your personal collection of NFTs.</p>
   
-      {/* Card Grid */}
-      <Row
-        gutter={[24, 24]}
-        style={{
-          marginTop: 20,
-          width: "100%",
-          maxWidth: "100%",
-          display: "flex",
-          justifyContent: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        {paginatedNFTs.map((nft) => (
-          <Col
-            key={nft.id}
-            xs={24} sm={12} md={8} lg={8} xl={6}
+      {loading ? (
+        <Spin size="large" />
+      ) : (
+        <>
+          {/* Card Grid */}
+          <Row
+            gutter={[24, 24]}
             style={{
+              marginTop: 20,
+              width: "100%",
+              maxWidth: "100%",
               display: "flex",
               justifyContent: "center",
+              flexWrap: "wrap",
             }}
           >
-            <Card
-              hoverable
-              style={{
-                width: "100%",
-                maxWidth: "280px", // Increase max width to improve spacing
-                minWidth: "220px",  // Increase minimum width to prevent stacking
-                margin: "0 auto",
-              }}
-              cover={<img alt={nft.name} src={nft.uri} />}
-              actions={[
-                <Button type="link" onClick={() => handleSellClick(nft)}>
-                  Sell
-                </Button>
-              ]}
-            >
-              <Meta title={nft.name} description={`Rarity: ${nft.rarity}, Price: ${nft.price} APT`} />
-              <p>ID: {nft.id}</p>
-              <p>{nft.description}</p>
-              <p style={{ margin: "10px 0" }}>For Sale: {nft.for_sale ? "Yes" : "No"}</p>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+            {paginatedNFTs.map((nft) => (
+              <Col
+                key={nft.id}
+                xs={24} sm={12} md={8} lg={8} xl={6}
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <Card
+                  hoverable
+                  style={{
+                    width: "100%",
+                    maxWidth: "280px",
+                    minWidth: "220px",
+                    margin: "0 auto",
+                    borderRadius: "10px",
+                    boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+                  }}
+                  cover={<img alt={nft.name} src={nft.uri} style={{ borderRadius: "10px 10px 0 0" }} />}
+                  actions={[
+                    <Button type="primary" onClick={() => handleSellClick(nft)}>
+                      Sell
+                    </Button>
+                  ]}
+                >
+                  <Meta title={nft.name} description={`Rarity: ${nft.rarity}, Price: ${nft.price} APT`} />
+                  <p>ID: {nft.id}</p>
+                  <p>{nft.description}</p>
+                  <p style={{ margin: "10px 0" }}>For Sale: {nft.for_sale ? "Yes" : "No"}</p>
+                </Card>
+              </Col>
+            ))}
+          </Row>
   
-      <div style={{ marginTop: 30, marginBottom: 30 }}>
-        <Pagination
-          current={currentPage}
-          pageSize={pageSize}
-          total={totalNFTs}
-          onChange={(page) => setCurrentPage(page)}
-          style={{ display: "flex", justifyContent: "center" }}
-        />
-      </div>
-  
-      <Modal
-        title="Sell NFT"
-        visible={isModalVisible}
-        onCancel={handleCancel}
-        footer={[
-          <Button key="cancel" onClick={handleCancel}>
-            Cancel
-          </Button>,
-          <Button key="confirm" type="primary" onClick={handleConfirmListing}>
-            Confirm Listing
-          </Button>,
-        ]}
-      >
-        {selectedNft && (
-          <>
-            <p><strong>NFT ID:</strong> {selectedNft.id}</p>
-            <p><strong>Name:</strong> {selectedNft.name}</p>
-            <p><strong>Description:</strong> {selectedNft.description}</p>
-            <p><strong>Rarity:</strong> {selectedNft.rarity}</p>
-            <p><strong>Current Price:</strong> {selectedNft.price} APT</p>
-  
-            <Input
-              type="number"
-              placeholder="Enter sale price in APT"
-              value={salePrice}
-              onChange={(e) => setSalePrice(e.target.value)}
-              style={{ marginTop: 10 }}
+          <div style={{ marginTop: 30, marginBottom: 30 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={totalNFTs}
+              onChange={(page) => setCurrentPage(page)}
+              style={{ display: "flex", justifyContent: "center" }}
             />
-          </>
-        )}
-      </Modal>
+          </div>
+  
+          <Modal
+            title="Sell NFT"
+            visible={isModalVisible}
+            onCancel={handleCancel}
+            footer={[
+              <Button key="cancel" onClick={handleCancel}>
+                Cancel
+              </Button>,
+              <Button key="confirm" type="primary" onClick={handleConfirmListing}>
+                Confirm Listing
+              </Button>,
+            ]}
+          >
+            {selectedNft && (
+              <>
+                <p><strong>NFT ID:</strong> {selectedNft.id}</p>
+                <p><strong>Name:</strong> {selectedNft.name}</p>
+                <p><strong>Description:</strong> {selectedNft.description}</p>
+                <p><strong>Rarity:</strong> {selectedNft.rarity}</p>
+                <p><strong>Current Price:</strong> {selectedNft.price} APT</p>
+  
+                <Input
+                  type="number"
+                  placeholder="Enter sale price in APT"
+                  value={salePrice}
+                  onChange={(e) => setSalePrice(e.target.value)}
+                  style={{ marginTop: 10 }}
+                />
+              </>
+            )}
+          </Modal>
+        </>
+      )}
     </div>
   );  
 };

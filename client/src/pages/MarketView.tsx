@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal } from "antd";
+import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin } from "antd";
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 
@@ -50,9 +50,15 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   const [isBuyModalVisible, setIsBuyModalVisible] = useState(false);
   const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    handleFetchNfts(undefined);
+    const fetchNfts = async () => {
+      setLoading(true);
+      await handleFetchNfts(undefined);
+      setLoading(false);
+    };
+    fetchNfts();
   }, []);
 
   const handleFetchNfts = async (selectedRarity: number | undefined) => {
@@ -129,123 +135,95 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   const paginatedNfts = nfts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
-    <div
-      style={{  
-        textAlign: "center",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-      }}
-    >
+    <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <Title level={2} style={{ marginBottom: "20px" }}>Marketplace</Title>
-  
-      {/* Filter Buttons */}
-      <div style={{ marginBottom: "20px" }}>
-        <Radio.Group
-          value={rarity}
-          onChange={(e) => {
-            const selectedRarity = e.target.value;
-            setRarity(selectedRarity);
-            handleFetchNfts(selectedRarity === 'all' ? undefined : selectedRarity);
-          }}
-          buttonStyle="solid"
-        >
-          <Radio.Button value="all">All</Radio.Button>
-          <Radio.Button value={1}>Common</Radio.Button>
-          <Radio.Button value={2}>Uncommon</Radio.Button>
-          <Radio.Button value={3}>Rare</Radio.Button>
-          <Radio.Button value={4}>Super Rare</Radio.Button>
-        </Radio.Group>
-      </div>
-  
-      {/* Card Grid */}
-      <Row
-        gutter={[24, 24]}
-        style={{
-          marginTop: 20,
-          width: "100%",
-          display: "flex",
-          justifyContent: "center", // Center row content
-          flexWrap: "wrap",
-        }}
-      >
-        {paginatedNfts.map((nft) => (
-          <Col
-            key={nft.id}
-            xs={24} sm={12} md={8} lg={6} xl={6}
-            style={{
-              display: "flex",
-              justifyContent: "center", // Center the single card horizontally
-              alignItems: "center", // Center content in both directions
-            }}
-          >
-            <Card
-              hoverable
-              style={{
-                width: "100%", // Make the card responsive
-                maxWidth: "240px", // Limit the card width on larger screens
-                margin: "0 auto",
+      {loading ? (
+        <Spin size="large" />
+      ) : (
+        <>
+          {/* Filter Buttons */}
+          <div style={{ marginBottom: "20px" }}>
+            <Radio.Group
+              value={rarity}
+              onChange={(e) => {
+                const selectedRarity = e.target.value;
+                setRarity(selectedRarity);
+                handleFetchNfts(selectedRarity === 'all' ? undefined : selectedRarity);
               }}
-              cover={<img alt={nft.name} src={nft.uri} />}
-              actions={[
-                <Button type="link" onClick={() => handleBuyClick(nft)}>
-                  Buy
-                </Button>
-              ]}
+              buttonStyle="solid"
             >
-              {/* Rarity Tag */}
-              <Tag
-                color={rarityColors[nft.rarity]}
-                style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "10px" }}
-              >
-                {rarityLabels[nft.rarity]}
-              </Tag>
-  
-              <Meta title={nft.name} description={`Price: ${nft.price} APT`} />
-              <p>{nft.description}</p>
-              <p>ID: {nft.id}</p>
-              <p>Owner: {truncateAddress(nft.owner)}</p>
-            </Card>
-          </Col>
-        ))}
-      </Row>
-  
-      {/* Pagination */}
-      <div style={{ marginTop: 30, marginBottom: 30 }}>
-        <Pagination
-          current={currentPage}
-          pageSize={pageSize}
-          total={nfts.length}
-          onChange={(page) => setCurrentPage(page)}
-          style={{ display: "flex", justifyContent: "center" }}
-        />
-      </div>
-  
-      {/* Buy Modal */}
-      <Modal
-        title="Purchase NFT"
-        visible={isBuyModalVisible}
-        onCancel={handleCancelBuy}
-        footer={[
-          <Button key="cancel" onClick={handleCancelBuy}>
-            Cancel
-          </Button>,
-          <Button key="confirm" type="primary" onClick={handleConfirmPurchase}>
-            Confirm Purchase
-          </Button>,
-        ]}
-      >
-        {selectedNft && (
-          <>
-            <p><strong>NFT ID:</strong> {selectedNft.id}</p>
-            <p><strong>Name:</strong> {selectedNft.name}</p>
-            <p><strong>Description:</strong> {selectedNft.description}</p>
-            <p><strong>Rarity:</strong> {rarityLabels[selectedNft.rarity]}</p>
-            <p><strong>Price:</strong> {selectedNft.price} APT</p>
-            <p><strong>Owner:</strong> {truncateAddress(selectedNft.owner)}</p>
-          </>
-        )}
-      </Modal>
+              <Radio.Button value="all">All</Radio.Button>
+              <Radio.Button value={1}>Common</Radio.Button>
+              <Radio.Button value={2}>Uncommon</Radio.Button>
+              <Radio.Button value={3}>Rare</Radio.Button>
+              <Radio.Button value={4}>Super Rare</Radio.Button>
+            </Radio.Group>
+          </div>
+
+          {/* Card Grid */}
+          <Row gutter={[24, 24]} style={{ marginTop: 20, width: "100%", display: "flex", justifyContent: "center", flexWrap: "wrap" }}>
+            {paginatedNfts.map((nft) => (
+              <Col key={nft.id} xs={24} sm={12} md={8} lg={6} xl={6} style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                <Card
+                  hoverable
+                  style={{ width: "100%", maxWidth: "240px", margin: "0 auto", borderRadius: "10px", boxShadow: "0 4px 8px rgba(0,0,0,0.1)" }}
+                  cover={<img alt={nft.name} src={nft.uri} style={{ borderRadius: "10px 10px 0 0" }} />}
+                  actions={[
+                    <Button type="primary" onClick={() => handleBuyClick(nft)}>Buy</Button>
+                  ]}
+                >
+                  {/* Rarity Tag */}
+                  <Tag color={rarityColors[nft.rarity]} style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "10px" }}>
+                    {rarityLabels[nft.rarity]}
+                  </Tag>
+
+                  <Meta title={nft.name} description={`Price: ${nft.price} APT`} />
+                  <p>{nft.description}</p>
+                  <p>ID: {nft.id}</p>
+                  <p>Owner: {truncateAddress(nft.owner)}</p>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+
+          {/* Pagination */}
+          <div style={{ marginTop: 30, marginBottom: 30 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={nfts.length}
+              onChange={(page) => setCurrentPage(page)}
+              style={{ display: "flex", justifyContent: "center" }}
+            />
+          </div>
+
+          {/* Buy Modal */}
+          <Modal
+            title="Purchase NFT"
+            visible={isBuyModalVisible}
+            onCancel={handleCancelBuy}
+            footer={[
+              <Button key="cancel" onClick={handleCancelBuy}>
+                Cancel
+              </Button>,
+              <Button key="confirm" type="primary" onClick={handleConfirmPurchase}>
+                Confirm Purchase
+              </Button>,
+            ]}
+          >
+            {selectedNft && (
+              <>
+                <p><strong>NFT ID:</strong> {selectedNft.id}</p>
+                <p><strong>Name:</strong> {selectedNft.name}</p>
+                <p><strong>Description:</strong> {selectedNft.description}</p>
+                <p><strong>Rarity:</strong> {rarityLabels[selectedNft.rarity]}</p>
+                <p><strong>Price:</strong> {selectedNft.price} APT</p>
+                <p><strong>Owner:</strong> {truncateAddress(selectedNft.owner)}</p>
+              </>
+            )}
+          </Modal>
+        </>
+      )}
     </div>
   );
 };
