@@ -4,7 +4,6 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
     module NFTMarketplace {
         use std::signer;
         use std::vector;
-        use std::string;
         use aptos_framework::coin;
         use aptos_framework::aptos_coin;
         use aptos_framework::timestamp;
@@ -27,7 +26,8 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
             nfts: vector<NFT>,
             auctions: vector<Auction>,
             offers: Table<u64, vector<Offer>>,
-            creator_royalties: Table<address, u64>
+            creator_royalties: Table<address, u64>,
+            stats: MarketplaceStats
         }
         
         // TODO# 4: Define ListedNFT Structure
@@ -45,8 +45,15 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
             let marketplace = Marketplace {
                 nfts: vector::empty<NFT>(),
                 auctions: vector::empty<Auction>(),
-                offers: table::new(),
-                creator_royalties: table::new()
+                offers: table::new<u64, vector<Offer>>(),
+                creator_royalties: table::new<address, u64>(),
+                stats: MarketplaceStats {
+                    total_sales: 0,
+                    total_volume: 0,
+                    active_listings: 0,
+                    total_users: table::new(),
+                    sales_by_rarity: vector::empty()
+                }
             };
             move_to(account, marketplace);
         }
@@ -110,25 +117,37 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
         }
 
         // TODO# 12: Purchase NFT
-        public entry fun purchase_nft(account: &signer, marketplace_addr: address, nft_id: u64, payment: u64) acquires Marketplace {
+        public entry fun purchase_nft(
+            account: &signer,
+            marketplace_addr: address,
+            nft_id: u64,
+            payment: u64
+        ) acquires Marketplace {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
             let nft_ref = vector::borrow_mut(&mut marketplace.nfts, nft_id);
-
-            assert!(nft_ref.for_sale, 400); // NFT is not for sale
-            assert!(payment >= nft_ref.price, 401); // Insufficient payment
-
-            // Calculate marketplace fee
-            let fee = (nft_ref.price * MARKETPLACE_FEE_PERCENT) / 100;
-            let seller_revenue = payment - fee;
-
-            // Transfer payment to the seller and fee to the marketplace
-            coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, seller_revenue);
-            coin::transfer<aptos_coin::AptosCoin>(account, signer::address_of(account), fee);
-
-            // Transfer ownership
-            nft_ref.owner = signer::address_of(account);
+            let buyer_addr = signer::address_of(account);
+            
+            assert!(nft_ref.for_sale, 400);
+            assert!(payment >= nft_ref.price, 401);
+            
+            let creator_royalty = *table::borrow(&marketplace.creator_royalties, nft_ref.owner);
+            let royalty_amount = (payment * creator_royalty) / 100;
+            let marketplace_fee = (payment * MARKETPLACE_FEE_PERCENT) / 100;
+            let seller_revenue = payment - royalty_amount - marketplace_fee;
+            
+            // Transfer payments
+            coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
+            coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, marketplace_fee);
+            
+            // Update NFT ownership
+            nft_ref.owner = buyer_addr;
             nft_ref.for_sale = false;
             nft_ref.price = 0;
+            
+            // Update marketplace stats
+            let stats = &mut marketplace.stats;
+            stats.total_sales = stats.total_sales + 1;
+            stats.total_volume = stats.total_volume + payment;
         }
 
         // TODO# 13: Check if NFT is for Sale
@@ -246,7 +265,7 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
             active: bool
         }
 
-        struct Offer has store {
+        struct Offer has store, drop, copy {
             nft_id: u64,
             buyer: address,
             price: u64,
@@ -316,6 +335,97 @@ address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
                 marketplace_addr,
                 bid_amount
             );
+        }
+
+        // Add these functions for royalty management
+        public entry fun set_creator_royalty(
+            account: &signer,
+            marketplace_addr: address,
+            royalty_percentage: u64
+        ) acquires Marketplace {
+            let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            assert!(royalty_percentage <= 30, 1005); // Max 30% royalty
+            table::upsert(&mut marketplace.creator_royalties, signer::address_of(account), royalty_percentage);
+        }
+
+        // Add these functions for offer management
+        public entry fun make_offer(
+            account: &signer,
+            marketplace_addr: address,
+            nft_id: u64,
+            offer_price: u64,
+            expiration: u64
+        ) acquires Marketplace {
+            let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            let buyer_addr = signer::address_of(account);
+            
+            assert!(expiration > timestamp::now_seconds(), 1006);
+            
+            let offer = Offer {
+                nft_id,
+                buyer: buyer_addr,
+                price: offer_price,
+                expiration
+            };
+            
+            if (!table::contains(&marketplace.offers, nft_id)) {
+                table::add(&mut marketplace.offers, nft_id, vector::empty<Offer>());
+            };
+            
+            let offers = table::borrow_mut(&mut marketplace.offers, nft_id);
+            vector::push_back(offers, offer);
+        }
+
+        public entry fun accept_offer(
+            account: &signer,
+            marketplace_addr: address,
+            nft_id: u64,
+            offer_index: u64
+        ) acquires Marketplace {
+            let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            let nft_ref = vector::borrow_mut(&mut marketplace.nfts, nft_id);
+            assert!(nft_ref.owner == signer::address_of(account), 1007);
+            
+            let offers = table::borrow_mut(&mut marketplace.offers, nft_id);
+            let offer = *vector::borrow(offers, offer_index);
+            assert!(offer.expiration > timestamp::now_seconds(), 1008);
+            
+            vector::remove(offers, offer_index);
+            
+            let royalty_amount = (offer.price * ROYALTY_PERCENTAGE) / 100;
+            let marketplace_fee = (offer.price * MARKETPLACE_FEE_PERCENT) / 100;
+            let seller_revenue = offer.price - royalty_amount - marketplace_fee;
+            
+            coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
+            coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, marketplace_fee);
+            
+            nft_ref.owner = offer.buyer;
+            nft_ref.for_sale = false;
+            nft_ref.price = 0;
+            
+            let stats = &mut marketplace.stats;
+            stats.total_sales = stats.total_sales + 1;
+            stats.total_volume = stats.total_volume + offer.price;
+        }
+
+        // Add analytics structures
+        struct MarketplaceStats has store {
+            total_sales: u64,
+            total_volume: u64,
+            active_listings: u64,
+            total_users: Table<address, bool>,
+            sales_by_rarity: vector<u64>
+        }
+
+        // Add analytics view functions
+        #[view]
+        public fun get_marketplace_stats(marketplace_addr: address): (u64, u64, u64) acquires Marketplace {
+            let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            (
+                marketplace.stats.total_sales,
+                marketplace.stats.total_volume,
+                marketplace.stats.active_listings
+            )
         }
     }
 }
