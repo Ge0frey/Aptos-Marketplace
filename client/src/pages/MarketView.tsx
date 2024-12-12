@@ -3,6 +3,7 @@ import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Mo
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AuctionCard from '../components/AuctionCard';
+import MarketplaceFilters from '../components/MarketplaceFilters';
 
 const { Title } = Typography;
 const { Meta } = Card;
@@ -63,6 +64,8 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   const [loading, setLoading] = useState(true);
   const [activeAuctions, setActiveAuctions] = useState<Auction[]>([]);
   const [viewMode, setViewMode] = useState<'marketplace' | 'auctions'>('marketplace');
+  const [filters, setFilters] = useState({});
+  const [sortedNfts, setSortedNfts] = useState<NFT[]>([]);
 
   useEffect(() => {
     const fetchNfts = async () => {
@@ -195,7 +198,35 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
     }
   };
 
-  const paginatedNfts = nfts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const handleFilterChange = (newFilters: any) => {
+    setFilters(newFilters);
+    const filtered = nfts.filter((nft) => {
+      if (newFilters.rarity && nft.rarity !== newFilters.rarity) return false;
+      if (newFilters.minPrice && nft.price < newFilters.minPrice) return false;
+      if (newFilters.maxPrice && nft.price > newFilters.maxPrice) return false;
+      return true;
+    });
+
+    // Handle sorting
+    const sorted = [...filtered].sort((a, b) => {
+      switch (newFilters.sortBy) {
+        case 'price_asc':
+          return a.price - b.price;
+        case 'price_desc':
+          return b.price - a.price;
+        case 'rarity_desc':
+          return b.rarity - a.rarity;
+        case 'latest':
+          return b.id - a.id;
+        default:
+          return 0;
+      }
+    });
+
+    setSortedNfts(sorted);
+  };
+
+  const paginatedNfts = sortedNfts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -215,6 +246,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
             <Spin size="large" />
           ) : (
             <>
+              <MarketplaceFilters onFilterChange={handleFilterChange} />
               {/* Filter Buttons */}
               <div style={{ marginBottom: "20px" }}>
                 <Radio.Group
@@ -265,7 +297,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                 <Pagination
                   current={currentPage}
                   pageSize={pageSize}
-                  total={nfts.length}
+                  total={sortedNfts.length}
                   onChange={(page) => setCurrentPage(page)}
                   style={{ display: "flex", justifyContent: "center" }}
                 />
