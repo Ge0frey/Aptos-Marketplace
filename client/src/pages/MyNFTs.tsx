@@ -24,7 +24,7 @@ const MyNFTs: React.FC = () => {
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [totalNFTs, setTotalNFTs] = useState(0);
   const { account, signAndSubmitTransaction } = useWallet();
-  const marketplaceAddr = "0x48667e48ce12bea1c960d98a9949aa3b3d9da6a9b2577de610891c21609314f1";
+  const marketplaceAddr = "0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921";
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
