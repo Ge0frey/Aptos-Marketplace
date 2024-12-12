@@ -1,11 +1,14 @@
 // TODO# 1: Define Module and Marketplace Address
-address 0x48667e48ce12bea1c960d98a9949aa3b3d9da6a9b2577de610891c21609314f1 {
+address 0x492337a98252299daa82f9daa349f61c9bb450a1b066dd974a0d28a424b08921 {
 
     module NFTMarketplace {
-        use 0x1::signer;
-        use 0x1::vector;
-        use 0x1::coin;
-        use 0x1::aptos_coin;
+        use std::signer;
+        use std::vector;
+        use std::string;
+        use aptos_framework::coin;
+        use aptos_framework::aptos_coin;
+        use aptos_framework::timestamp;
+        use aptos_std::table::{Self, Table};
 
         // TODO# 2: Define NFT Structure
         struct NFT has store, key {
@@ -21,7 +24,10 @@ address 0x48667e48ce12bea1c960d98a9949aa3b3d9da6a9b2577de610891c21609314f1 {
 
         // TODO# 3: Define Marketplace Structure
         struct Marketplace has key {
-            nfts: vector<NFT>
+            nfts: vector<NFT>,
+            auctions: vector<Auction>,
+            offers: Table<u64, vector<Offer>>,
+            creator_royalties: Table<address, u64>
         }
         
         // TODO# 4: Define ListedNFT Structure
@@ -37,7 +43,10 @@ address 0x48667e48ce12bea1c960d98a9949aa3b3d9da6a9b2577de610891c21609314f1 {
         // TODO# 6: Initialize Marketplace        
                 public entry fun initialize(account: &signer) {
             let marketplace = Marketplace {
-                nfts: vector::empty<NFT>()
+                nfts: vector::empty<NFT>(),
+                auctions: vector::empty<Auction>(),
+                offers: table::new(),
+                creator_royalties: table::new()
             };
             move_to(account, marketplace);
         }
@@ -225,6 +234,88 @@ address 0x48667e48ce12bea1c960d98a9949aa3b3d9da6a9b2577de610891c21609314f1 {
             };
 
             nft_ids
+        }
+
+        // New structures for auctions and offers
+        struct Auction has store {
+            nft_id: u64,
+            start_price: u64,
+            current_bid: u64,
+            highest_bidder: address,
+            end_time: u64,
+            active: bool
+        }
+
+        struct Offer has store {
+            nft_id: u64,
+            buyer: address,
+            price: u64,
+            expiration: u64
+        }
+
+        // Constants
+        const ROYALTY_PERCENTAGE: u64 = 5; // 5% royalty for creators
+        const MIN_AUCTION_DURATION: u64 = 3600; // 1 hour in seconds
+        
+        // Create auction
+        public entry fun create_auction(
+            account: &signer,
+            marketplace_addr: address,
+            nft_id: u64,
+            start_price: u64,
+            duration: u64
+        ) acquires Marketplace {
+            let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            let nft = vector::borrow(&marketplace.nfts, nft_id);
+            
+            assert!(nft.owner == signer::address_of(account), 1000);
+            assert!(duration >= MIN_AUCTION_DURATION, 1001);
+            
+            let auction = Auction {
+                nft_id,
+                start_price,
+                current_bid: start_price,
+                highest_bidder: @0x0,
+                end_time: timestamp::now_seconds() + duration,
+                active: true
+            };
+            
+            vector::push_back(&mut marketplace.auctions, auction);
+        }
+
+        // Place bid
+        public entry fun place_bid(
+            account: &signer,
+            marketplace_addr: address,
+            auction_id: u64,
+            bid_amount: u64
+        ) acquires Marketplace {
+            let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            let auction = vector::borrow_mut(&mut marketplace.auctions, auction_id);
+            
+            assert!(auction.active, 1002);
+            assert!(timestamp::now_seconds() < auction.end_time, 1003);
+            assert!(bid_amount > auction.current_bid, 1004);
+            
+            // Return funds to previous highest bidder if exists
+            if (auction.highest_bidder != @0x0) {
+                coin::transfer<aptos_coin::AptosCoin>(
+                    account,
+                    auction.highest_bidder,
+                    auction.current_bid
+                );
+            };
+            
+            // Update auction
+            auction.current_bid = bid_amount;
+            auction.highest_bidder = signer::address_of(account);
+            
+            // Transfer bid amount
+            coin::transfer<aptos_coin::AptosCoin>(
+                account,
+                marketplace_addr,
+                bid_amount
+            );
         }
     }
 }
