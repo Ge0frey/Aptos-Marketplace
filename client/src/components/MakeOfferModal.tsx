@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Form, Input, Button, message } from 'antd';
 import { useWallet, InputTransactionData } from "@aptos-labs/wallet-adapter-react";
+import { AptosClient } from "aptos";
 
 interface MakeOfferModalProps {
   visible: boolean;
@@ -13,6 +14,8 @@ const ERROR_MESSAGES: { [key: number]: string } = {
   1006: "Offer expiration time must be in the future",
   1009: "NFT does not exist",
 };
+
+const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
 
 const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
   visible,
@@ -44,7 +47,7 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
       };
 
       const response = await signAndSubmitTransaction(payload);
-      await (window as any).aptos.waitForTransaction(response.hash);
+      await client.waitForTransaction(response.hash);
       message.success('Offer made successfully!');
       onCancel();
     } catch (error) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Form, Input, Button, message } from 'antd';
 import { useWallet, InputTransactionData } from "@aptos-labs/wallet-adapter-react";
+import { AptosClient } from "aptos";
 
 interface CreateAuctionModalProps {
   visible: boolean;
@@ -14,6 +15,8 @@ const ERROR_MESSAGES: { [key: number]: string } = {
   1001: "Auction duration must be at least 1 hour",
   1010: "NFT does not exist",
 };
+
+const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
 
 const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
   visible,
@@ -44,13 +47,13 @@ const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
       };
 
       const response = await signAndSubmitTransaction(payload);
-      await (window as any).aptos.waitForTransaction(response.hash);
+      await client.waitForTransaction(response.hash);
       message.success('Auction created successfully!');
       onCancel();
     } catch (error) {
       console.error('Error creating auction:', error);
       const errorCode = extractErrorCode(error);
-      const errorMessage = ERROR_MESSAGES[errorCode] || 'Failed to create auction. Error: ' + (error as Error).message;
+      const errorMessage = ERROR_MESSAGES[errorCode] || 'Failed to create auction';
       message.error(errorMessage);
     } finally {
       setLoading(false);
