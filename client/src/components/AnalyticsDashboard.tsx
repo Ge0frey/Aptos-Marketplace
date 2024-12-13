@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Typography } from 'antd';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { message } from 'antd';
+import { AptosClient } from "aptos";
 
 const { Title } = Typography;
 
@@ -8,8 +10,21 @@ interface AnalyticsProps {
   marketplaceAddr: string;
 }
 
+interface Stats {
+    totalSales: number;
+    totalVolume: number;
+    activeListings: number;
+    salesHistory: Array<{
+        date: string;
+        sales: number;
+        volume: number;
+    }>;
+}
+
+const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
+
 const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalSales: 0,
     totalVolume: 0,
     activeListings: 0,
@@ -21,7 +36,23 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
   }, []);
 
   const fetchStats = async () => {
-    // Implement your stats fetching logic here
+    try {
+        const response = await client.view({
+            function: `${marketplaceAddr}::NFTMarketplace::get_marketplace_stats`,
+            arguments: [marketplaceAddr],
+            type_arguments: [],
+        });
+
+        setStats({
+            totalSales: Number(response[0]),
+            totalVolume: Number(response[1]) / 100000000, // Convert from Octas to APT
+            activeListings: Number(response[2]),
+            salesHistory: [] // You'll need to implement sales history tracking in the smart contract
+        });
+    } catch (error) {
+        console.error("Error fetching marketplace stats:", error);
+        message.error("Failed to fetch marketplace statistics");
+    }
   };
 
   return (
