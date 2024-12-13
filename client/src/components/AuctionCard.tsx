@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, message } from 'antd';
-import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { useWallet, InputTransactionData } from "@aptos-labs/wallet-adapter-react";
 
 interface AuctionCardProps {
   nftId: number;
@@ -8,6 +8,7 @@ interface AuctionCardProps {
   currentBid: number;
   endTime: number;
   onPlaceBid: (amount: number) => Promise<void>;
+  marketplaceAddr: string;
 }
 
 const AuctionCard: React.FC<AuctionCardProps> = ({
@@ -16,10 +17,11 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
   currentBid,
   endTime,
   onPlaceBid,
+  marketplaceAddr,
 }) => {
   const [bidAmount, setBidAmount] = useState<string>('');
   const [timeLeft, setTimeLeft] = useState<string>('');
-  const { connected } = useWallet();
+  const { connected, signAndSubmitTransaction } = useWallet();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -47,10 +49,25 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
         message.error('Bid must be higher than current bid');
         return;
       }
-      await onPlaceBid(amount);
+
+      const amountInOctas = amount * 100000000;
+      const payload: InputTransactionData = {
+        data: {
+          function: `${marketplaceAddr}::NFTMarketplace::place_bid`,
+          typeArguments: [],
+          functionArguments: [marketplaceAddr, nftId.toString(), amountInOctas.toString()]
+        }
+      };
+
+      const response = await signAndSubmitTransaction(payload);
+      await (window as any).aptos.waitForTransaction(response.hash);
+      
       setBidAmount('');
       message.success('Bid placed successfully');
+      // Refresh auction data
+      onPlaceBid(amount);
     } catch (error) {
+      console.error('Error placing bid:', error);
       message.error('Failed to place bid');
     }
   };
@@ -78,4 +95,4 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
   );
 };
 
-export default AuctionCard; 
+export default AuctionCard;
