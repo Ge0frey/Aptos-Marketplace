@@ -9,6 +9,11 @@ interface MakeOfferModalProps {
   marketplaceAddr: string;
 }
 
+const ERROR_MESSAGES: { [key: number]: string } = {
+  1006: "Offer expiration time must be in the future",
+  1009: "NFT does not exist",
+};
+
 const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
   visible,
   onCancel,
@@ -21,15 +26,20 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
   const handleMakeOffer = async (values: { offerPrice: string; expirationHours: string }) => {
     try {
       setLoading(true);
-      const priceInOctas = parseFloat(values.offerPrice) * 100000000;
+      const priceInOctas = Math.floor(parseFloat(values.offerPrice) * 100000000).toString();
       const currentTime = Math.floor(Date.now() / 1000);
-      const expirationTime = currentTime + (parseInt(values.expirationHours) * 3600);
+      const expirationTime = (currentTime + (parseInt(values.expirationHours) * 3600)).toString();
 
       const payload: InputTransactionData = {
         data: {
           function: `${marketplaceAddr}::NFTMarketplace::make_offer`,
           typeArguments: [],
-          functionArguments: [marketplaceAddr, nftId, priceInOctas.toString(), expirationTime.toString()]
+          functionArguments: [
+            marketplaceAddr,
+            nftId,
+            priceInOctas,
+            expirationTime
+          ]
         }
       };
 
@@ -39,10 +49,17 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
       onCancel();
     } catch (error) {
       console.error('Error making offer:', error);
-      message.error('Failed to make offer');
+      const errorCode = extractErrorCode(error);
+      const errorMessage = ERROR_MESSAGES[errorCode] || 'Failed to make offer';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const extractErrorCode = (error: any): number => {
+    const match = error.message?.match(/Move abort (\d+)/);
+    return match ? parseInt(match[1]) : 0;
   };
 
   return (

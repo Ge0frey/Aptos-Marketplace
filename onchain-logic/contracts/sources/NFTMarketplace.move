@@ -130,10 +130,18 @@ address 0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2 {
             assert!(nft_ref.for_sale, 400);
             assert!(payment >= nft_ref.price, 401);
             
-            let creator_royalty = *table::borrow(&marketplace.creator_royalties, nft_ref.owner);
-            let royalty_amount = (payment * creator_royalty) / 100;
+            // Calculate fees without requiring creator royalties
             let marketplace_fee = (payment * MARKETPLACE_FEE_PERCENT) / 100;
-            let seller_revenue = payment - royalty_amount - marketplace_fee;
+            let seller_revenue = payment - marketplace_fee;
+            
+            // Only apply royalties if they exist for the seller
+            if (table::contains(&marketplace.creator_royalties, nft_ref.owner)) {
+                let creator_royalty = *table::borrow(&marketplace.creator_royalties, nft_ref.owner);
+                let royalty_amount = (payment * creator_royalty) / 100;
+                seller_revenue = seller_revenue - royalty_amount;
+                // Transfer royalty to creator
+                coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, royalty_amount);
+            };
             
             // Transfer payments
             coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
@@ -285,8 +293,10 @@ address 0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2 {
             duration: u64
         ) acquires Marketplace {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
-            let nft = vector::borrow(&marketplace.nfts, nft_id);
             
+            // Verify NFT exists and caller is owner
+            assert!(nft_id < vector::length(&marketplace.nfts), 1010);
+            let nft = vector::borrow(&marketplace.nfts, nft_id);
             assert!(nft.owner == signer::address_of(account), 1000);
             assert!(duration >= MIN_AUCTION_DURATION, 1001);
             
@@ -359,6 +369,8 @@ address 0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2 {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
             let buyer_addr = signer::address_of(account);
             
+            // Verify NFT exists
+            assert!(nft_id < vector::length(&marketplace.nfts), 1009);
             assert!(expiration > timestamp::now_seconds(), 1006);
             
             let offer = Offer {

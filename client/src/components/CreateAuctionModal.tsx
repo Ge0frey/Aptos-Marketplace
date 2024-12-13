@@ -9,6 +9,12 @@ interface CreateAuctionModalProps {
   marketplaceAddr: string;
 }
 
+const ERROR_MESSAGES: { [key: number]: string } = {
+  1000: "You are not the owner of this NFT",
+  1001: "Auction duration must be at least 1 hour",
+  1010: "NFT does not exist",
+};
+
 const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
   visible,
   onCancel,
@@ -21,14 +27,19 @@ const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
   const handleCreateAuction = async (values: { startPrice: string; duration: string }) => {
     try {
       setLoading(true);
-      const startPriceInOctas = parseFloat(values.startPrice) * 100000000;
-      const durationInSeconds = parseInt(values.duration) * 3600; // Convert hours to seconds
+      const startPriceInOctas = Math.floor(parseFloat(values.startPrice) * 100000000).toString();
+      const durationInSeconds = (parseInt(values.duration) * 3600).toString();
 
       const payload: InputTransactionData = {
         data: {
           function: `${marketplaceAddr}::NFTMarketplace::create_auction`,
           typeArguments: [],
-          functionArguments: [marketplaceAddr, nftId, startPriceInOctas.toString(), durationInSeconds.toString()]
+          functionArguments: [
+            marketplaceAddr,
+            nftId,
+            startPriceInOctas,
+            durationInSeconds
+          ]
         }
       };
 
@@ -38,10 +49,17 @@ const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
       onCancel();
     } catch (error) {
       console.error('Error creating auction:', error);
-      message.error('Failed to create auction');
+      const errorCode = extractErrorCode(error);
+      const errorMessage = ERROR_MESSAGES[errorCode] || 'Failed to create auction. Error: ' + (error as Error).message;
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const extractErrorCode = (error: any): number => {
+    const match = error.message?.match(/Move abort (\d+)/);
+    return match ? parseInt(match[1]) : 0;
   };
 
   return (
