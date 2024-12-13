@@ -6,6 +6,8 @@ import AuctionCard from '../components/AuctionCard';
 import MarketplaceFilters from '../components/MarketplaceFilters';
 import { hexToUint8Array } from '../utils/helpers';
 import { MoveValue } from 'aptos/src/generated';
+import CreateAuctionModal from '../components/CreateAuctionModal';
+import MakeOfferModal from '../components/MakeOfferModal';
 
 const { Title } = Typography;
 const { Meta } = Card;
@@ -68,6 +70,9 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   const [viewMode, setViewMode] = useState<'marketplace' | 'auctions'>('marketplace');
   const [filters, setFilters] = useState({});
   const [sortedNfts, setSortedNfts] = useState<NFT[]>([]);
+  const [isCreateAuctionModalVisible, setIsCreateAuctionModalVisible] = useState(false);
+  const [isMakeOfferModalVisible, setIsMakeOfferModalVisible] = useState(false);
+  const [selectedNftId, setSelectedNftId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchNfts = async () => {
@@ -164,29 +169,27 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   const fetchAuctions = async () => {
     try {
-        const response = await client.view({
-            function: `${marketplaceAddr}::NFTMarketplace::get_active_auctions`,
-            arguments: [marketplaceAddr],
-            type_arguments: [],
-        });
-        
-        console.log("Auctions response:", response);
-        
-        const auctions = Array.isArray(response[0]) ? response[0].map((auction: any) => ({
-            nft_id: Number(auction.nft_id),
-            start_price: Number(auction.start_price) / 100000000,
-            current_bid: Number(auction.current_bid) / 100000000,
-            highest_bidder: auction.highest_bidder,
-            end_time: Number(auction.end_time),
-            active: Boolean(auction.active)
-        })) : [];
-        
-        setActiveAuctions(auctions);
+      const response = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_active_auctions`,
+        arguments: [marketplaceAddr],
+        type_arguments: [],
+      });
+
+      const auctions = Array.isArray(response[0]) ? response[0].map((auction: any) => ({
+        nft_id: Number(auction.nft_id),
+        start_price: Number(auction.start_price) / 100000000,
+        current_bid: Number(auction.current_bid) / 100000000,
+        highest_bidder: auction.highest_bidder,
+        end_time: Number(auction.end_time),
+        active: Boolean(auction.active)
+      })) : [];
+
+      setActiveAuctions(auctions);
     } catch (error) {
-        console.error('Error fetching auctions:', error);
-        message.error('Failed to fetch auctions. Please check if auctions are implemented in the smart contract.');
+      console.error('Error fetching auctions:', error);
+      message.error('Failed to fetch auctions');
     }
-};
+  };
 
   const handlePlaceBid = async (auctionId: number, amount: number) => {
     try {
@@ -285,7 +288,27 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                       style={{ width: "100%", maxWidth: "240px", margin: "0 auto", borderRadius: "10px", boxShadow: "0 4px 8px rgba(0,0,0,0.1)" }}
                       cover={<img alt={nft.name} src={nft.uri} style={{ borderRadius: "10px 10px 0 0" }} />}
                       actions={[
-                        <Button type="primary" onClick={() => handleBuyClick(nft)}>Buy</Button>
+                        <Button key="buy" type="primary" onClick={() => handleBuyClick(nft)}>
+                          Buy
+                        </Button>,
+                        <Button 
+                          key="auction" 
+                          onClick={() => {
+                            setSelectedNftId(nft.id);
+                            setIsCreateAuctionModalVisible(true);
+                          }}
+                        >
+                          Create Auction
+                        </Button>,
+                        <Button 
+                          key="offer" 
+                          onClick={() => {
+                            setSelectedNftId(nft.id);
+                            setIsMakeOfferModalVisible(true);
+                          }}
+                        >
+                          Make Offer
+                        </Button>
                       ]}
                     >
                       {/* Rarity Tag */}
@@ -338,6 +361,22 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                   </>
                 )}
               </Modal>
+              {selectedNftId && (
+                <>
+                  <CreateAuctionModal
+                    visible={isCreateAuctionModalVisible}
+                    onCancel={() => setIsCreateAuctionModalVisible(false)}
+                    nftId={selectedNftId}
+                    marketplaceAddr={marketplaceAddr}
+                  />
+                  <MakeOfferModal
+                    visible={isMakeOfferModalVisible}
+                    onCancel={() => setIsMakeOfferModalVisible(false)}
+                    nftId={selectedNftId}
+                    marketplaceAddr={marketplaceAddr}
+                  />
+                </>
+              )}
             </>
           )}
         </>
@@ -352,6 +391,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                 currentBid={auction.current_bid / 100000000}
                 endTime={auction.end_time}
                 onPlaceBid={(amount) => handlePlaceBid(auction.nft_id, amount)}
+                marketplaceAddr={marketplaceAddr}
               />
             </Col>
           ))}
