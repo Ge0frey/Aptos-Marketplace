@@ -4,6 +4,8 @@ import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AuctionCard from '../components/AuctionCard';
 import MarketplaceFilters from '../components/MarketplaceFilters';
+import { hexToUint8Array } from '../utils/helpers';
+import { MoveValue } from 'aptos/src/generated';
 
 const { Title } = Typography;
 const { Meta } = Card;
@@ -84,35 +86,42 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   const handleFetchNfts = async (selectedRarity: number | undefined) => {
     try {
-        const response = await client.getAccountResource(
-            marketplaceAddr,
-            "0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2::NFTMarketplace::Marketplace"
+        const response = await client.view({
+            function: `${marketplaceAddr}::NFTMarketplace::get_all_nfts_for_sale`,
+            arguments: [marketplaceAddr, "100", "0"],
+            type_arguments: [],
+        });
+
+        const listedNfts = Array.isArray(response[0]) ? response[0] : [];
+        const filteredNfts = listedNfts.filter(nft => 
+            selectedRarity === undefined || nft.rarity === selectedRarity
         );
-        const nftList = (response.data as { nfts: NFT[] }).nfts;
 
-        const hexToUint8Array = (hexString: string): Uint8Array => {
-            const bytes = new Uint8Array(hexString.length / 2);
-            for (let i = 0; i < hexString.length; i += 2) {
-                bytes[i / 2] = parseInt(hexString.substr(i, 2), 16);
-            }
-            return bytes;
-        };
+        const decodedNfts: NFT[] = await Promise.all(
+            filteredNfts.map(async (nft: any) => {
+                const details = await client.view({
+                    function: `${marketplaceAddr}::NFTMarketplace::get_nft_details`,
+                    arguments: [marketplaceAddr, nft.id],
+                    type_arguments: [],
+                });
+                
+                return {
+                    id: Number(details[0]),
+                    owner: details[1].toString(),
+                    name: new TextDecoder().decode(hexToUint8Array(details[2].toString())),
+                    description: new TextDecoder().decode(hexToUint8Array(details[3].toString())),
+                    uri: new TextDecoder().decode(hexToUint8Array(details[4].toString())),
+                    price: Number(details[5]) / 100000000,
+                    for_sale: Boolean(details[6]),
+                    rarity: Number(details[7])
+                };
+            })
+        );
 
-        const decodedNfts = nftList.map((nft) => ({
-            ...nft,
-            name: new TextDecoder().decode(hexToUint8Array(nft.name.slice(2))),
-            description: new TextDecoder().decode(hexToUint8Array(nft.description.slice(2))),
-            uri: new TextDecoder().decode(hexToUint8Array(nft.uri.slice(2))),
-            price: nft.price / 100000000,
-        }));
-
-        // Filter NFTs based on `for_sale` property and rarity if selected
-        const filteredNfts = decodedNfts.filter((nft) => nft.for_sale && (selectedRarity === undefined || nft.rarity === selectedRarity));
-
-        setNfts(filteredNfts);
-        setCurrentPage(1);
+        setNfts(decodedNfts);
+        setSortedNfts(decodedNfts);
     } catch (error) {
-        console.error("Error fetching NFTs by rarity:", error);
+        console.error("Error fetching NFTs:", error);
         message.error("Failed to fetch NFTs.");
     }
 };
@@ -155,28 +164,29 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   const fetchAuctions = async () => {
     try {
-      const response = await client.view({
-        function: `${marketplaceAddr}::NFTMarketplace::get_active_auctions`,
-        type_arguments: [],
-        arguments: [],
-      });
-      
-      // Use Array.isArray to ensure response[0] is an array before mapping
-      const auctions: Auction[] = Array.isArray(response[0]) ? response[0].map((auction: any) => ({
-        nft_id: Number(auction.nft_id),
-        start_price: Number(auction.start_price),
-        current_bid: Number(auction.current_bid),
-        highest_bidder: auction.highest_bidder,
-        end_time: Number(auction.end_time),
-        active: Boolean(auction.active)
-      })) : [];
-      
-      setActiveAuctions(auctions);
+        const response = await client.view({
+            function: `${marketplaceAddr}::NFTMarketplace::get_active_auctions`,
+            arguments: [marketplaceAddr],
+            type_arguments: [],
+        });
+        
+        console.log("Auctions response:", response);
+        
+        const auctions = Array.isArray(response[0]) ? response[0].map((auction: any) => ({
+            nft_id: Number(auction.nft_id),
+            start_price: Number(auction.start_price) / 100000000,
+            current_bid: Number(auction.current_bid) / 100000000,
+            highest_bidder: auction.highest_bidder,
+            end_time: Number(auction.end_time),
+            active: Boolean(auction.active)
+        })) : [];
+        
+        setActiveAuctions(auctions);
     } catch (error) {
-      console.error('Error fetching auctions:', error);
-      message.error('Failed to fetch auctions');
+        console.error('Error fetching auctions:', error);
+        message.error('Failed to fetch auctions. Please check if auctions are implemented in the smart contract.');
     }
-  };
+};
 
   const handlePlaceBid = async (auctionId: number, amount: number) => {
     try {
