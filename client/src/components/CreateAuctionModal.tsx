@@ -30,31 +30,26 @@ const CreateAuctionModal: React.FC<CreateAuctionModalProps> = ({
   const handleCreateAuction = async (values: { startPrice: string; duration: string }) => {
     try {
       setLoading(true);
-      const startPriceInOctas = Math.floor(parseFloat(values.startPrice) * 100000000).toString();
-      const durationInSeconds = (parseInt(values.duration) * 3600).toString();
+      const startPriceInOctas = Math.floor(parseFloat(values.startPrice) * 100000000);
+      const durationInSeconds = Math.floor(parseFloat(values.duration) * 3600);
 
-      const payload: InputTransactionData = {
-        data: {
-          function: `${marketplaceAddr}::NFTMarketplace::create_auction`,
-          typeArguments: [],
-          functionArguments: [
-            marketplaceAddr,
-            nftId,
-            startPriceInOctas,
-            durationInSeconds
-          ]
-        }
+      const payload = {
+        type: "entry_function_payload",
+        function: `${marketplaceAddr}::NFTMarketplace::create_auction`,
+        type_arguments: [],
+        arguments: [marketplaceAddr, nftId, startPriceInOctas.toString(), durationInSeconds.toString()]
       };
 
-      const response = await signAndSubmitTransaction(payload);
+      const response = await (window as any).aptos.signAndSubmitTransaction(payload);
       await client.waitForTransaction(response.hash);
+      
       message.success('Auction created successfully!');
       onCancel();
+      
+      window.dispatchEvent(new CustomEvent('auctionCreated'));
     } catch (error) {
       console.error('Error creating auction:', error);
-      const errorCode = extractErrorCode(error);
-      const errorMessage = ERROR_MESSAGES[errorCode] || 'Failed to create auction';
-      message.error(errorMessage);
+      message.error('Failed to create auction');
     } finally {
       setLoading(false);
     }

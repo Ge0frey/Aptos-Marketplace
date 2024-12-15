@@ -264,7 +264,7 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
         }
 
         // New structures for auctions and offers
-        struct Auction has store {
+        struct Auction has store, copy {
             nft_id: u64,
             start_price: u64,
             current_bid: u64,
@@ -438,6 +438,25 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
                 marketplace.stats.total_volume,
                 marketplace.stats.active_listings
             )
+        }
+
+        // Add this view function to fetch active auctions
+        #[view]
+        public fun get_active_auctions(marketplace_addr: address): vector<Auction> acquires Marketplace {
+            let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            let active_auctions = vector::empty<Auction>();
+            
+            let auctions_len = vector::length(&marketplace.auctions);
+            let mut_i = 0;
+            while (mut_i < auctions_len) {
+                let auction = vector::borrow(&marketplace.auctions, mut_i);
+                if (auction.active && auction.end_time > timestamp::now_seconds()) {
+                    vector::push_back(&mut active_auctions, *auction);
+                };
+                mut_i = mut_i + 1;
+            };
+            
+            active_auctions
         }
     }
 }

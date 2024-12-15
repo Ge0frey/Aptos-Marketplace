@@ -241,6 +241,25 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   const paginatedNfts = sortedNfts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  useEffect(() => {
+    if (viewMode === 'auctions') {
+      fetchAuctions();
+      const interval = setInterval(fetchAuctions, 10000); // Refresh every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    const handleAuctionCreated = () => {
+      if (viewMode === 'auctions') {
+        fetchAuctions();
+      }
+    };
+
+    window.addEventListener('auctionCreated', handleAuctionCreated);
+    return () => window.removeEventListener('auctionCreated', handleAuctionCreated);
+  }, [viewMode]);
+
   return (
     <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <Title level={2} style={{ marginBottom: "20px" }}>Marketplace</Title>
