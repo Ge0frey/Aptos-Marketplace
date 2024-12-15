@@ -1,5 +1,5 @@
 // TODO# 1: Define Module and Marketplace Address
-address 0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2 {
+address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
 
     module NFTMarketplace {
         use std::signer;
