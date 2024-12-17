@@ -1,5 +1,5 @@
 // TODO# 1: Define Module and Marketplace Address
-address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
+address 0xd0d60ffeaf4522719f6ae8282783c63e7559932b07f2f9fb2ea706d63f76b74d {
 
     module NFTMarketplace {
         use std::signer;
@@ -31,6 +31,8 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
             creator_royalties: Table<address, u64>,
             stats: MarketplaceStats,
             bid_events: event::EventHandle<BidPlacedEvent>,
+            offer_events: event::EventHandle<OfferCreatedEvent>,
+            offer_status_events: event::EventHandle<OfferStatusChangedEvent>
         }
         
         // TODO# 4: Define ListedNFT Structure
@@ -58,6 +60,8 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
                     sales_by_rarity: vector::empty()
                 },
                 bid_events: account::new_event_handle<BidPlacedEvent>(account),
+                offer_events: account::new_event_handle<OfferCreatedEvent>(account),
+                offer_status_events: account::new_event_handle<OfferStatusChangedEvent>(account)
             };
             move_to(account, marketplace);
         }
@@ -281,7 +285,22 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
             nft_id: u64,
             buyer: address,
             price: u64,
+            expiration: u64,
+            status: u8  // 0: pending, 1: accepted, 2: rejected, 3: expired
+        }
+
+        struct OfferCreatedEvent has drop, store {
+            nft_id: u64,
+            buyer: address,
+            price: u64,
             expiration: u64
+        }
+
+        struct OfferStatusChangedEvent has drop, store {
+            nft_id: u64,
+            buyer: address,
+            price: u64,
+            new_status: u8
         }
 
         // Constants
@@ -423,7 +442,8 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
                 nft_id,
                 buyer: buyer_addr,
                 price: offer_price,
-                expiration
+                expiration,
+                status: 0
             };
             
             if (!table::contains(&marketplace.offers, nft_id)) {
@@ -511,6 +531,43 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
             bidder: address,
             bid_amount: u64,
             timestamp: u64,
+        }
+
+        // Add view function to get offers for an NFT
+        #[view]
+        public fun get_offers_for_nft(marketplace_addr: address, nft_id: u64): vector<Offer> acquires Marketplace {
+            let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            if (table::contains(&marketplace.offers, nft_id)) {
+                *table::borrow(&marketplace.offers, nft_id)
+            } else {
+                vector::empty<Offer>()
+            }
+        }
+
+        // Add view function to get user's offers
+        #[view]
+        public fun get_user_offers(marketplace_addr: address, user_addr: address): vector<Offer> acquires Marketplace {
+            let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            let user_offers = vector::empty<Offer>();
+            
+            let nft_count = vector::length(&marketplace.nfts);
+            let i = 0;
+            while (i < nft_count) {
+                if (table::contains(&marketplace.offers, i)) {
+                    let nft_offers = table::borrow(&marketplace.offers, i);
+                    let j = 0;
+                    while (j < vector::length(nft_offers)) {
+                        let offer = vector::borrow(nft_offers, j);
+                        if (offer.buyer == user_addr && offer.status == 0) {
+                            vector::push_back(&mut user_offers, *offer);
+                        };
+                        j = j + 1;
+                    };
+                };
+                i = i + 1;
+            };
+            
+            user_offers
         }
     }
 }
