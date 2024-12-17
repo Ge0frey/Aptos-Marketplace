@@ -300,7 +300,7 @@ address 0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093 {
             nft_id: u64,
             buyer: address,
             price: u64,
-            new_status: u8
+            new_status: u8  // 0: pending, 1: accepted, 2: rejected, 3: expired
         }
 
         // Constants
@@ -434,7 +434,7 @@ address 0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093 {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
             let buyer_addr = signer::address_of(account);
             
-            // Verify NFT exists
+            // Verify NFT exists and expiration is valid
             assert!(nft_id < vector::length(&marketplace.nfts), 1009);
             assert!(expiration > timestamp::now_seconds(), 1006);
             
@@ -446,12 +446,21 @@ address 0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093 {
                 status: 0
             };
             
+            // Initialize offers vector if it doesn't exist
             if (!table::contains(&marketplace.offers, nft_id)) {
                 table::add(&mut marketplace.offers, nft_id, vector::empty<Offer>());
             };
             
             let offers = table::borrow_mut(&mut marketplace.offers, nft_id);
             vector::push_back(offers, offer);
+
+            // Emit offer created event
+            event::emit_event(&mut marketplace.offer_events, OfferCreatedEvent {
+                nft_id,
+                buyer: buyer_addr,
+                price: offer_price,
+                expiration
+            });
         }
 
         public entry fun accept_offer(
@@ -465,25 +474,43 @@ address 0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093 {
             assert!(nft_ref.owner == signer::address_of(account), 1007);
             
             let offers = table::borrow_mut(&mut marketplace.offers, nft_id);
-            let offer = *vector::borrow(offers, offer_index);
+            let offer = vector::borrow_mut(offers, offer_index);
             assert!(offer.expiration > timestamp::now_seconds(), 1008);
+            assert!(offer.status == 0, 1010); // Ensure offer is still pending
             
-            vector::remove(offers, offer_index);
+            // Update offer status to accepted
+            offer.status = 1;
             
-            let royalty_amount = (offer.price * ROYALTY_PERCENTAGE) / 100;
+            // Calculate fees and process payment
             let marketplace_fee = (offer.price * MARKETPLACE_FEE_PERCENT) / 100;
-            let seller_revenue = offer.price - royalty_amount - marketplace_fee;
+            let seller_revenue = offer.price - marketplace_fee;
             
+            // Apply creator royalties if they exist
+            if (table::contains(&marketplace.creator_royalties, nft_ref.owner)) {
+                let creator_royalty = *table::borrow(&marketplace.creator_royalties, nft_ref.owner);
+                let royalty_amount = (offer.price * creator_royalty) / 100;
+                seller_revenue = seller_revenue - royalty_amount;
+                
+                // Transfer royalty to creator
+                coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, royalty_amount);
+            };
+            
+            // Transfer payments
             coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
             coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, marketplace_fee);
             
+            // Update NFT ownership
             nft_ref.owner = offer.buyer;
             nft_ref.for_sale = false;
             nft_ref.price = 0;
             
-            let stats = &mut marketplace.stats;
-            stats.total_sales = stats.total_sales + 1;
-            stats.total_volume = stats.total_volume + offer.price;
+            // Emit offer status changed event
+            event::emit_event(&mut marketplace.offer_status_events, OfferStatusChangedEvent {
+                nft_id,
+                buyer: offer.buyer,
+                price: offer.price,
+                new_status: 1
+            });
         }
 
         // Add analytics structures
