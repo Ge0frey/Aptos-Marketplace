@@ -1,5 +1,5 @@
 // TODO# 1: Define Module and Marketplace Address
-address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
+address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
 
     module NFTMarketplace {
         use std::signer;
@@ -7,6 +7,8 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
         use aptos_framework::coin;
         use aptos_framework::aptos_coin;
         use aptos_framework::timestamp;
+        use aptos_framework::account;
+        use aptos_framework::event;
         use aptos_std::table::{Self, Table};
 
         // TODO# 2: Define NFT Structure
@@ -27,7 +29,8 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
             auctions: vector<Auction>,
             offers: Table<u64, vector<Offer>>,
             creator_royalties: Table<address, u64>,
-            stats: MarketplaceStats
+            stats: MarketplaceStats,
+            bid_events: event::EventHandle<BidPlacedEvent>,
         }
         
         // TODO# 4: Define ListedNFT Structure
@@ -53,7 +56,8 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
                     active_listings: 0,
                     total_users: table::new(),
                     sales_by_rarity: vector::empty()
-                }
+                },
+                bid_events: account::new_event_handle<BidPlacedEvent>(account),
             };
             move_to(account, marketplace);
         }
@@ -316,17 +320,47 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
         public entry fun place_bid(
             account: &signer,
             marketplace_addr: address,
-            auction_id: u64,
+            nft_id: u64,
             bid_amount: u64
         ) acquires Marketplace {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
-            let auction = vector::borrow_mut(&mut marketplace.auctions, auction_id);
             
-            assert!(auction.active, 1002);
-            assert!(timestamp::now_seconds() < auction.end_time, 1003);
-            assert!(bid_amount > auction.current_bid, 1004);
+            // Find the auction
+            let auctions_len = vector::length(&marketplace.auctions);
+            let mut_i = 0;
+            let found = false;
+            let auction_index = 0;
             
-            // Return funds to previous highest bidder if exists
+            while (mut_i < auctions_len) {
+                let auction = vector::borrow(&marketplace.auctions, mut_i);
+                if (auction.nft_id == nft_id && auction.active) {
+                    found = true;
+                    auction_index = mut_i;
+                    break
+                };
+                mut_i = mut_i + 1;
+            };
+            
+            // Verify auction exists and is active
+            assert!(found, 1000); // Auction not found
+            
+            let auction = vector::borrow_mut(&mut marketplace.auctions, auction_index);
+            let buyer_addr = signer::address_of(account);
+            
+            // Basic validations
+            assert!(auction.active, 1002); // Auction must be active
+            assert!(timestamp::now_seconds() < auction.end_time, 1003); // Auction must not be expired
+            assert!(bid_amount > auction.current_bid, 1004); // New bid must be higher
+            assert!(buyer_addr != auction.highest_bidder, 1005); // Cannot bid if you're already highest bidder
+            
+            // Transfer the bid amount from buyer to marketplace
+            coin::transfer<aptos_coin::AptosCoin>(
+                account,
+                marketplace_addr,
+                bid_amount
+            );
+            
+            // Return previous bid to previous bidder if exists
             if (auction.highest_bidder != @0x0) {
                 coin::transfer<aptos_coin::AptosCoin>(
                     account,
@@ -335,15 +369,19 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
                 );
             };
             
-            // Update auction
+            // Update auction state
             auction.current_bid = bid_amount;
-            auction.highest_bidder = signer::address_of(account);
+            auction.highest_bidder = buyer_addr;
             
-            // Transfer bid amount
-            coin::transfer<aptos_coin::AptosCoin>(
-                account,
-                marketplace_addr,
-                bid_amount
+            // Emit bid placed event
+            event::emit_event(
+                &mut marketplace.bid_events,
+                BidPlacedEvent {
+                    nft_id,
+                    bidder: buyer_addr,
+                    bid_amount,
+                    timestamp: timestamp::now_seconds(),
+                }
             );
         }
 
@@ -457,6 +495,14 @@ address 0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673 {
             };
             
             active_auctions
+        }
+
+        // Add this struct to your contract
+        struct BidPlacedEvent has drop, store {
+            nft_id: u64,
+            bidder: address,
+            bid_amount: u64,
+            timestamp: u64,
         }
     }
 }

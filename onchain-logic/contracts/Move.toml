@@ -3,7 +3,7 @@ name = "NFTMarketplace"
 version = "0.1.0"
 
 [addresses]
-NFTMarketplace = "0xad555f74237ff68f9c8fc1545530cb4600e25f7fab22b63bba3595ecdc448fb2"
+NFTMarketplace = "0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "main" }
