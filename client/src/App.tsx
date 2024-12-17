@@ -8,8 +8,9 @@ import MyNFTs from "./pages/MyNFTs";
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import RoyaltyManagement from "./components/RoyaltyManagement";
 const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
-const marketplaceAddr = "0xd0d60ffeaf4522719f6ae8282783c63e7559932b07f2f9fb2ea706d63f76b74d";
+const marketplaceAddr = "0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093";
 
 function App() {
   const { signAndSubmitTransaction } = useWallet();
@@ -51,6 +52,7 @@ function App() {
           <Route path="/" element={<MarketView marketplaceAddr={marketplaceAddr} />} />
           <Route path="/my-nfts" element={<MyNFTs />} />
           <Route path="/analytics" element={<AnalyticsDashboard marketplaceAddr={marketplaceAddr} />} />
+          <Route path="/royalties" element={<RoyaltyManagement marketplaceAddr={marketplaceAddr} />} />
         </Routes>
 
         <Modal
