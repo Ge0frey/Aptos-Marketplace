@@ -6,6 +6,7 @@ import { AptosClient } from "aptos";
 interface MakeOfferModalProps {
   visible: boolean;
   onCancel: () => void;
+  onSuccess?: () => void;
   nftId: number;
   marketplaceAddr: string;
 }
@@ -20,6 +21,7 @@ const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
 const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
   visible,
   onCancel,
+  onSuccess,
   nftId,
   marketplaceAddr,
 }) => {
@@ -49,7 +51,12 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
       const response = await signAndSubmitTransaction(payload);
       await client.waitForTransaction(response.hash);
       message.success('Offer made successfully!');
-      onCancel();
+      
+      setTimeout(() => {
+        onSuccess?.();
+        onCancel();
+      }, 1000);
+      
     } catch (error) {
       console.error('Error making offer:', error);
       const errorCode = extractErrorCode(error);

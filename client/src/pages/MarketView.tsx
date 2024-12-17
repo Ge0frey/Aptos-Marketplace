@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin } from "antd";
+import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin, Divider } from "antd";
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AuctionCard from '../components/AuctionCard';
@@ -8,6 +8,9 @@ import { hexToUint8Array } from '../utils/helpers';
 import { MoveValue } from 'aptos/src/generated';
 import CreateAuctionModal from '../components/CreateAuctionModal';
 import MakeOfferModal from '../components/MakeOfferModal';
+import OffersDisplay from '../components/OffersDisplay';
+import { Offer, NFTOffer } from '../types/marketplace';
+import { InputTransactionData } from "@aptos-labs/wallet-adapter-react";
 
 const { Title } = Typography;
 const { Meta } = Card;
@@ -57,7 +60,7 @@ const truncateAddress = (address: string, start = 6, end = 4) => {
 };
 
 const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
-  const { signAndSubmitTransaction } = useWallet();
+  const { signAndSubmitTransaction, account } = useWallet();
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [rarity, setRarity] = useState<'all' | number>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,6 +76,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   const [isCreateAuctionModalVisible, setIsCreateAuctionModalVisible] = useState(false);
   const [isMakeOfferModalVisible, setIsMakeOfferModalVisible] = useState(false);
   const [selectedNftId, setSelectedNftId] = useState<number | null>(null);
+  const [nftOffers, setNftOffers] = useState<NFTOffer>({});
 
   useEffect(() => {
     const fetchNfts = async () => {
@@ -260,6 +264,101 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
     return () => window.removeEventListener('auctionCreated', handleAuctionCreated);
   }, [viewMode]);
 
+  const fetchOffersForNft = async (nftId: number) => {
+    try {
+      console.log('Fetching offers for NFT:', nftId);
+      const response = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_offers_for_nft`,
+        arguments: [marketplaceAddr, nftId.toString()],
+        type_arguments: [],
+      });
+      
+      console.log('Raw offers response:', response);
+      
+      // Ensure we're getting the correct data structure from the response
+      const offers = Array.isArray(response[0]) ? response[0] : [];
+      
+      console.log('Processed offers:', offers);
+      
+      // Transform the offers to match the Offer interface
+      const transformedOffers = offers.map((offer: any) => ({
+        nft_id: Number(offer.nft_id),
+        buyer: offer.buyer,
+        price: Number(offer.price) / 100000000,
+        expiration: Number(offer.expiration),
+        status: Number(offer.status)
+      }));
+
+      console.log('Transformed offers:', transformedOffers);
+
+      setNftOffers(prev => ({
+        ...prev,
+        [nftId]: transformedOffers
+      }));
+    } catch (error) {
+      console.error('Error fetching offers:', error);
+      setNftOffers(prev => ({
+        ...prev,
+        [nftId]: []
+      }));
+    }
+  };
+
+  useEffect(() => {
+    const fetchOffers = async () => {
+      if (paginatedNfts.length > 0) {
+        const promises = paginatedNfts.map(nft => fetchOffersForNft(nft.id));
+        await Promise.all(promises);
+      }
+    };
+    
+    fetchOffers();
+  }, [currentPage, paginatedNfts.length]);
+
+  const handleAcceptOffer = async (nftId: number, offerId: number) => {
+    try {
+      const payload: InputTransactionData = {
+        data: {
+          function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
+          typeArguments: [],
+          functionArguments: [marketplaceAddr, nftId, offerId]
+        }
+      };
+      
+      const response = await signAndSubmitTransaction(payload);
+      await client.waitForTransaction(response.hash);
+      message.success('Offer accepted successfully!');
+      fetchOffersForNft(nftId);
+    } catch (error) {
+      console.error('Error accepting offer:', error);
+      message.error('Failed to accept offer');
+    }
+  };
+
+  const handleCancelOffer = async (nftId: number, offerId: number) => {
+    try {
+      const payload: InputTransactionData = {
+        data: {
+          function: `${marketplaceAddr}::NFTMarketplace::cancel_offer`,
+          typeArguments: [],
+          functionArguments: [marketplaceAddr, nftId, offerId]
+        }
+      };
+      
+      const response = await signAndSubmitTransaction(payload);
+      await client.waitForTransaction(response.hash);
+      message.success('Offer cancelled successfully!');
+      fetchOffersForNft(nftId);
+    } catch (error) {
+      console.error('Error cancelling offer:', error);
+      message.error('Failed to cancel offer');
+    }
+  };
+
+  const refreshOffers = async (nftId: number) => {
+    await fetchOffersForNft(nftId);
+  };
+
   return (
     <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <Title level={2} style={{ marginBottom: "20px" }}>Marketplace</Title>
@@ -339,6 +438,15 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                       <p>{nft.description}</p>
                       <p>ID: {nft.id}</p>
                       <p>Owner: {truncateAddress(nft.owner)}</p>
+
+                      <Divider />
+                      
+                      <OffersDisplay
+                        offers={nftOffers[nft.id] || []}
+                        isOwner={account?.address === nft.owner}
+                        onAcceptOffer={handleAcceptOffer}
+                        onCancelOffer={handleCancelOffer}
+                      />
                     </Card>
                   </Col>
                 ))}
@@ -393,6 +501,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                     onCancel={() => setIsMakeOfferModalVisible(false)}
                     nftId={selectedNftId}
                     marketplaceAddr={marketplaceAddr}
+                    onSuccess={() => selectedNftId && refreshOffers(selectedNftId)}
                   />
                 </>
               )}
