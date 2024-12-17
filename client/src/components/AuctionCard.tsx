@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, message } from 'antd';
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { AptosClient } from "aptos";
+import { AptosClient, Types } from "aptos";
 
 // Create an instance of AptosClient
 const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
@@ -11,6 +11,7 @@ interface AuctionCardProps {
   startPrice: number;
   currentBid: number;
   endTime: number;
+  highestBidder: string;
   onPlaceBid: (amount: number) => Promise<void>;
   marketplaceAddr: string;
 }
@@ -20,12 +21,14 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
   startPrice,
   currentBid,
   endTime,
+  highestBidder,
   onPlaceBid,
   marketplaceAddr,
 }) => {
   const [bidAmount, setBidAmount] = useState<string>('');
   const [timeLeft, setTimeLeft] = useState<string>('');
-  const { connected } = useWallet();
+  const { connected, account } = useWallet();
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -48,14 +51,33 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
 
   const handleBid = async () => {
     try {
-      const amount = parseFloat(bidAmount);
-      if (isNaN(amount) || amount <= currentBid) {
-        message.error('Bid must be higher than current bid');
+      // Check if user is connected
+      if (!account) {
+        message.error('Please connect your wallet first');
         return;
       }
 
-      // Convert APT to Octas (1 APT = 100000000 Octas)
+      // Check if user is already highest bidder
+      if (account.address === highestBidder) {
+        message.error('You are already the highest bidder');
+        return;
+      }
+
+      const amount = parseFloat(bidAmount);
+      if (isNaN(amount)) {
+        message.error('Please enter a valid bid amount');
+        return;
+      }
+
+      if (amount <= currentBid) {
+        message.error(`Bid must be higher than current bid (${currentBid} APT)`);
+        return;
+      }
+
+      // Convert APT to Octas
       const amountInOctas = Math.floor(amount * 100000000);
+      
+      setLoading(true);
       
       const payload = {
         type: "entry_function_payload",
@@ -68,26 +90,34 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
         ]
       };
 
-      // Sign and submit transaction
       const response = await (window as any).aptos.signAndSubmitTransaction(payload);
       
       // Wait for transaction confirmation
-      await client.waitForTransaction(response.hash);
-
-      message.success('Bid placed successfully');
-      setBidAmount(''); // Clear bid amount
+      const txn = await client.waitForTransactionWithResult(response.hash);
       
-      // Refresh auction data
-      await onPlaceBid(amount);
-      
-      // Add small delay before refreshing
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      if ((txn as Types.UserTransaction).success) {
+        message.success('Bid placed successfully');
+        setBidAmount('');
+        await onPlaceBid(amount);
+      } else {
+        throw new Error('Transaction failed');
+      }
 
     } catch (error: any) {
       console.error('Error placing bid:', error);
-      message.error(error.message || 'Failed to place bid');
+      if (error.message?.includes('EALREADY_HIGHEST_BIDDER')) {
+        message.error('You are already the highest bidder');
+      } else if (error.message?.includes('EBID_TOO_LOW')) {
+        message.error('Bid amount must be higher than current bid');
+      } else if (error.message?.includes('EAUCTION_EXPIRED')) {
+        message.error('Auction has expired');
+      } else if (error.message?.includes('EAUCTION_NOT_ACTIVE')) {
+        message.error('Auction is not active');
+      } else {
+        message.error(error.message || 'Failed to place bid');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -130,6 +160,7 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
             }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#40a9ff'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1890ff'}
+            loading={loading}
           >
             Place Bid
           </Button>

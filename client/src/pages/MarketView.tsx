@@ -409,6 +409,7 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                 startPrice={auction.start_price / 100000000}
                 currentBid={auction.current_bid / 100000000}
                 endTime={auction.end_time}
+                highestBidder={auction.highest_bidder}
                 onPlaceBid={(amount) => handlePlaceBid(auction.nft_id, amount)}
                 marketplaceAddr={marketplaceAddr}
               />

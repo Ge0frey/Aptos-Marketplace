@@ -316,7 +316,15 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
             vector::push_back(&mut marketplace.auctions, auction);
         }
 
-        // Place bid
+        // Add these error constants at the top of the module
+        const ENFT_NOT_FOUND: u64 = 1000;
+        const EAUCTION_NOT_ACTIVE: u64 = 0x3ef;
+        const EAUCTION_EXPIRED: u64 = 0x3f0;
+        const EBID_TOO_LOW: u64 = 0x3ee;
+        const EALREADY_HIGHEST_BIDDER: u64 = 0x3ed;
+        const EINSUFFICIENT_BALANCE: u64 = 0x3f1;
+
+        // Update the place_bid function with better error handling
         public entry fun place_bid(
             account: &signer,
             marketplace_addr: address,
@@ -324,8 +332,9 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
             bid_amount: u64
         ) acquires Marketplace {
             let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+            let buyer_addr = signer::address_of(account);
             
-            // Find the auction
+            // Find the auction first
             let auctions_len = vector::length(&marketplace.auctions);
             let mut_i = 0;
             let found = false;
@@ -341,24 +350,16 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
                 mut_i = mut_i + 1;
             };
             
-            // Verify auction exists and is active
-            assert!(found, 1000); // Auction not found
+            assert!(found, ENFT_NOT_FOUND);
             
+            // Get a mutable reference to the auction
             let auction = vector::borrow_mut(&mut marketplace.auctions, auction_index);
-            let buyer_addr = signer::address_of(account);
             
-            // Basic validations
-            assert!(auction.active, 1002); // Auction must be active
-            assert!(timestamp::now_seconds() < auction.end_time, 1003); // Auction must not be expired
-            assert!(bid_amount > auction.current_bid, 1004); // New bid must be higher
-            assert!(buyer_addr != auction.highest_bidder, 1005); // Cannot bid if you're already highest bidder
-            
-            // Transfer the bid amount from buyer to marketplace
-            coin::transfer<aptos_coin::AptosCoin>(
-                account,
-                marketplace_addr,
-                bid_amount
-            );
+            // Validations using the mutable reference
+            assert!(auction.active, EAUCTION_NOT_ACTIVE);
+            assert!(timestamp::now_seconds() < auction.end_time, EAUCTION_EXPIRED);
+            assert!(bid_amount > auction.current_bid, EBID_TOO_LOW);
+            assert!(buyer_addr != auction.highest_bidder, EALREADY_HIGHEST_BIDDER);
             
             // Return previous bid to previous bidder if exists
             if (auction.highest_bidder != @0x0) {
@@ -369,7 +370,14 @@ address 0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4 {
                 );
             };
             
-            // Update auction state
+            // Transfer the new bid
+            coin::transfer<aptos_coin::AptosCoin>(
+                account,
+                marketplace_addr,
+                bid_amount
+            );
+            
+            // Update auction state using the mutable reference
             auction.current_bid = bid_amount;
             auction.highest_bidder = buyer_addr;
             
