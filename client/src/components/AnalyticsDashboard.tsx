@@ -36,6 +36,7 @@ interface Stats {
 const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
 
 const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({
     totalSales: 0,
     totalVolume: 0,
@@ -51,58 +52,61 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
 
   const fetchStats = async () => {
     try {
-      // Fetch basic stats
+      setLoading(true);
+      
+      // Fetch basic stats with error handling
       const basicStats = await client.view({
         function: `${marketplaceAddr}::NFTMarketplace::get_marketplace_stats`,
         arguments: [marketplaceAddr],
         type_arguments: [],
-      });
+      }).catch(() => [0, 0, 0, []]); // Provide fallback values
 
-      // Fetch sales by rarity
+      // Fetch rarity stats with error handling
       const rarityStats = await client.view({
         function: `${marketplaceAddr}::NFTMarketplace::get_sales_by_rarity`,
         arguments: [marketplaceAddr],
         type_arguments: [],
-      });
-
-      // Fetch user activity
-      const userStats = await client.view({
-        function: `${marketplaceAddr}::NFTMarketplace::get_user_activity`,
-        arguments: [marketplaceAddr],
-        type_arguments: [],
-      });
+      }).catch(() => [[]]); // Provide fallback values
 
       // Type assertions and proper parsing
-      const parsedRarityStats = (rarityStats[0] as MoveStructValue[]).map((stat: any) => ({
-        rarity: Number(stat.rarity),
-        sales: Number(stat.sales),
-        volume: Number(stat.volume) / 100000000
-      }));
+      const parsedSalesHistory = Array.isArray(basicStats[3]) 
+        ? (basicStats[3] as any[]).map((history: any) => ({
+            date: new Date(Number(history.date) * 1000).toLocaleDateString(),
+            sales: Number(history.sales),
+            volume: Number(history.volume) / 100000000
+          }))
+        : [];
 
-      const parsedSalesHistory = ((basicStats[3] as MoveStructValue[]) || []).map((history: any) => ({
-        date: history.date,
-        sales: Number(history.sales),
-        volume: Number(history.volume) / 100000000
-      }));
-
-      const parsedUserActivity = (userStats[0] as MoveStructValue[]).map((user: any) => ({
-        user: user.address,
-        purchases: Number(user.purchases),
-        sales: Number(user.sales),
-        volume: Number(user.volume) / 100000000
-      }));
+      const parsedRarityStats = Array.isArray(rarityStats[0])
+        ? (rarityStats[0] as any[]).map((stat: any) => ({
+            rarity: Number(stat.rarity),
+            sales: Number(stat.sales),
+            volume: Number(stat.volume) / 100000000
+          }))
+        : [];
 
       setStats({
         totalSales: Number(basicStats[0]),
         totalVolume: Number(basicStats[1]) / 100000000,
         activeListings: Number(basicStats[2]),
-        salesByRarity: parsedRarityStats,
         salesHistory: parsedSalesHistory,
-        userActivity: parsedUserActivity
+        salesByRarity: parsedRarityStats,
+        userActivity: [] // This can be implemented later if needed
       });
     } catch (error) {
       console.error("Error fetching marketplace stats:", error);
       message.error("Failed to fetch marketplace statistics");
+      // Set default values on error
+      setStats({
+        totalSales: 0,
+        totalVolume: 0,
+        activeListings: 0,
+        salesHistory: [],
+        salesByRarity: [],
+        userActivity: []
+      });
+    } finally {
+      setLoading(false);
     }
   };
 

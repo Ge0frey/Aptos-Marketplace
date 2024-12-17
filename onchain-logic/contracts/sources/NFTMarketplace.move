@@ -56,7 +56,7 @@ address 0xd0d60ffeaf4522719f6ae8282783c63e7559932b07f2f9fb2ea706d63f76b74d {
                     total_sales: 0,
                     total_volume: 0,
                     active_listings: 0,
-                    total_users: table::new(),
+                    sales_history: vector::empty(),
                     sales_by_rarity: vector::empty()
                 },
                 bid_events: account::new_event_handle<BidPlacedEvent>(account),
@@ -491,19 +491,55 @@ address 0xd0d60ffeaf4522719f6ae8282783c63e7559932b07f2f9fb2ea706d63f76b74d {
             total_sales: u64,
             total_volume: u64,
             active_listings: u64,
-            total_users: Table<address, bool>,
-            sales_by_rarity: vector<u64>
+            sales_history: vector<SalesHistory>,
+            sales_by_rarity: vector<RaritySales>
         }
 
-        // Add analytics view functions
+        struct SalesHistory has store, drop, copy {
+            date: u64,  // Unix timestamp
+            sales: u64,
+            volume: u64
+        }
+
+        struct RaritySales has store, drop, copy {
+            rarity: u8,
+            sales: u64,
+            volume: u64
+        }
+
+        // Add these view functions before the last closing brace
         #[view]
-        public fun get_marketplace_stats(marketplace_addr: address): (u64, u64, u64) acquires Marketplace {
+        public fun get_marketplace_stats(marketplace_addr: address): (u64, u64, u64, vector<SalesHistory>) acquires Marketplace {
             let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            let stats = &marketplace.stats;
+            
             (
-                marketplace.stats.total_sales,
-                marketplace.stats.total_volume,
-                marketplace.stats.active_listings
+                stats.total_sales,
+                stats.total_volume,
+                stats.active_listings,
+                stats.sales_history
             )
+        }
+
+        #[view]
+        public fun get_sales_by_rarity(marketplace_addr: address): vector<RaritySales> acquires Marketplace {
+            let marketplace = borrow_global<Marketplace>(marketplace_addr);
+            let mut_stats = marketplace.stats.sales_by_rarity;
+            
+            if (vector::is_empty(&mut_stats)) {
+                let i = 1;
+                while (i <= 4) {
+                    let rarity_stats = RaritySales {
+                        rarity: i,
+                        sales: 0,
+                        volume: 0
+                    };
+                    vector::push_back(&mut mut_stats, rarity_stats);
+                    i = i + 1;
+                };
+            };
+            
+            mut_stats
         }
 
         // Add this view function to fetch active auctions
