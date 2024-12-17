@@ -9,7 +9,7 @@ import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
-const marketplaceAddr = "0x8fef1d480852a1b41c4761a6a721c71a7b66db9feda1b54120747ee918a30673";
+const marketplaceAddr = "0x2455345f8f7fcd592918c6008eb3b7ac75e6fc16041a8916c42172dcd12497d4";
 
 function App() {
   const { signAndSubmitTransaction } = useWallet();

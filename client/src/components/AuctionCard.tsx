@@ -54,22 +54,40 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
         return;
       }
 
+      // Convert APT to Octas (1 APT = 100000000 Octas)
       const amountInOctas = Math.floor(amount * 100000000);
+      
       const payload = {
         type: "entry_function_payload",
         function: `${marketplaceAddr}::NFTMarketplace::place_bid`,
         type_arguments: [],
-        arguments: [marketplaceAddr, nftId, amountInOctas.toString()]
+        arguments: [
+          marketplaceAddr,
+          nftId.toString(),
+          amountInOctas.toString()
+        ]
       };
 
+      // Sign and submit transaction
       const response = await (window as any).aptos.signAndSubmitTransaction(payload);
-      await client.waitForTransaction(response.hash);
       
+      // Wait for transaction confirmation
+      await client.waitForTransaction(response.hash);
+
       message.success('Bid placed successfully');
-      onPlaceBid(amount);
-    } catch (error) {
+      setBidAmount(''); // Clear bid amount
+      
+      // Refresh auction data
+      await onPlaceBid(amount);
+      
+      // Add small delay before refreshing
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error: any) {
       console.error('Error placing bid:', error);
-      message.error('Failed to place bid');
+      message.error(error.message || 'Failed to place bid');
     }
   };
 
