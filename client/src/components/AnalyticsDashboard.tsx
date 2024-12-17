@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Typography } from 'antd';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { Card, Row, Col, Statistic, Typography, Table } from 'antd';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { message } from 'antd';
 import { AptosClient } from "aptos";
+import { MoveValue, MoveStructValue } from "aptos/src/generated";
 
 const { Title } = Typography;
 
@@ -11,14 +12,25 @@ interface AnalyticsProps {
 }
 
 interface Stats {
-    totalSales: number;
-    totalVolume: number;
-    activeListings: number;
-    salesHistory: Array<{
-        date: string;
-        sales: number;
-        volume: number;
-    }>;
+  totalSales: number;
+  totalVolume: number;
+  activeListings: number;
+  salesByRarity: Array<{
+    rarity: number;
+    sales: number;
+    volume: number;
+  }>;
+  salesHistory: Array<{
+    date: string;
+    sales: number;
+    volume: number;
+  }>;
+  userActivity: Array<{
+    user: string;
+    purchases: number;
+    sales: number;
+    volume: number;
+  }>;
 }
 
 const client = new AptosClient("https://fullnode.devnet.aptoslabs.com/v1");
@@ -28,7 +40,9 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
     totalSales: 0,
     totalVolume: 0,
     activeListings: 0,
-    salesHistory: []
+    salesByRarity: [],
+    salesHistory: [],
+    userActivity: []
   });
 
   useEffect(() => {
@@ -37,28 +51,73 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
 
   const fetchStats = async () => {
     try {
-        const response = await client.view({
-            function: `${marketplaceAddr}::NFTMarketplace::get_marketplace_stats`,
-            arguments: [marketplaceAddr],
-            type_arguments: [],
-        });
+      // Fetch basic stats
+      const basicStats = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_marketplace_stats`,
+        arguments: [marketplaceAddr],
+        type_arguments: [],
+      });
 
-        setStats({
-            totalSales: Number(response[0]),
-            totalVolume: Number(response[1]) / 100000000, // Convert from Octas to APT
-            activeListings: Number(response[2]),
-            salesHistory: [] // You'll need to implement sales history tracking in the smart contract
-        });
+      // Fetch sales by rarity
+      const rarityStats = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_sales_by_rarity`,
+        arguments: [marketplaceAddr],
+        type_arguments: [],
+      });
+
+      // Fetch user activity
+      const userStats = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_user_activity`,
+        arguments: [marketplaceAddr],
+        type_arguments: [],
+      });
+
+      // Type assertions and proper parsing
+      const parsedRarityStats = (rarityStats[0] as MoveStructValue[]).map((stat: any) => ({
+        rarity: Number(stat.rarity),
+        sales: Number(stat.sales),
+        volume: Number(stat.volume) / 100000000
+      }));
+
+      const parsedSalesHistory = ((basicStats[3] as MoveStructValue[]) || []).map((history: any) => ({
+        date: history.date,
+        sales: Number(history.sales),
+        volume: Number(history.volume) / 100000000
+      }));
+
+      const parsedUserActivity = (userStats[0] as MoveStructValue[]).map((user: any) => ({
+        user: user.address,
+        purchases: Number(user.purchases),
+        sales: Number(user.sales),
+        volume: Number(user.volume) / 100000000
+      }));
+
+      setStats({
+        totalSales: Number(basicStats[0]),
+        totalVolume: Number(basicStats[1]) / 100000000,
+        activeListings: Number(basicStats[2]),
+        salesByRarity: parsedRarityStats,
+        salesHistory: parsedSalesHistory,
+        userActivity: parsedUserActivity
+      });
     } catch (error) {
-        console.error("Error fetching marketplace stats:", error);
-        message.error("Failed to fetch marketplace statistics");
+      console.error("Error fetching marketplace stats:", error);
+      message.error("Failed to fetch marketplace statistics");
     }
+  };
+
+  const rarityLabels: { [key: number]: string } = {
+    1: "Common",
+    2: "Uncommon",
+    3: "Rare",
+    4: "Super Rare",
   };
 
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>Marketplace Analytics</Title>
       
+      {/* Basic Stats Cards */}
       <Row gutter={16}>
         <Col span={8}>
           <Card>
@@ -90,6 +149,7 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
         </Col>
       </Row>
 
+      {/* Sales History Chart */}
       <Card style={{ marginTop: '24px' }}>
         <Title level={4}>Sales History</Title>
         <LineChart
@@ -103,9 +163,65 @@ const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ marketplaceAddr }) => {
           <YAxis />
           <Tooltip />
           <Legend />
-          <Line type="monotone" dataKey="sales" stroke="#8884d8" />
-          <Line type="monotone" dataKey="volume" stroke="#82ca9d" />
+          <Line type="monotone" dataKey="sales" stroke="#8884d8" name="Number of Sales" />
+          <Line type="monotone" dataKey="volume" stroke="#82ca9d" name="Volume (APT)" />
         </LineChart>
+      </Card>
+
+      {/* Sales by Rarity Chart */}
+      <Card style={{ marginTop: '24px' }}>
+        <Title level={4}>Sales by Rarity</Title>
+        <BarChart
+          width={800}
+          height={400}
+          data={stats.salesByRarity}
+          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="rarity" tickFormatter={(value) => rarityLabels[value] || value} />
+          <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+          <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+          <Tooltip formatter={(value, name, props) => [value, name]} />
+          <Legend />
+          <Bar yAxisId="left" dataKey="sales" fill="#8884d8" name="Number of Sales" />
+          <Bar yAxisId="right" dataKey="volume" fill="#82ca9d" name="Volume (APT)" />
+        </BarChart>
+      </Card>
+
+      {/* User Activity Table */}
+      <Card style={{ marginTop: '24px' }}>
+        <Title level={4}>User Activity</Title>
+        <Table
+          dataSource={stats.userActivity}
+          columns={[
+            {
+              title: 'User',
+              dataIndex: 'user',
+              key: 'user',
+              render: (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`
+            },
+            {
+              title: 'Purchases',
+              dataIndex: 'purchases',
+              key: 'purchases',
+              sorter: (a, b) => a.purchases - b.purchases
+            },
+            {
+              title: 'Sales',
+              dataIndex: 'sales',
+              key: 'sales',
+              sorter: (a, b) => a.sales - b.sales
+            },
+            {
+              title: 'Volume (APT)',
+              dataIndex: 'volume',
+              key: 'volume',
+              sorter: (a, b) => a.volume - b.volume,
+              render: (volume: number) => volume.toFixed(2)
+            }
+          ]}
+          pagination={{ pageSize: 10 }}
+        />
       </Card>
     </div>
   );
