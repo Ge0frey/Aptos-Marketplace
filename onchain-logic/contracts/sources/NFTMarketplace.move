@@ -600,10 +600,12 @@ address 0x8e6b6e0acaba0eb04e9557b285509e0bfbf4a7e6391b5cb8da09b5a153236093 {
         #[view]
         public fun get_offers_for_nft(marketplace_addr: address, nft_id: u64): vector<Offer> acquires Marketplace {
             let marketplace = borrow_global<Marketplace>(marketplace_addr);
-            if (table::contains(&marketplace.offers, nft_id)) {
-                *table::borrow(&marketplace.offers, nft_id)
-            } else {
+            
+            if (!table::contains(&marketplace.offers, nft_id)) {
                 vector::empty<Offer>()
+            } else {
+                let offers = table::borrow(&marketplace.offers, nft_id);
+                *offers
             }
         }
 

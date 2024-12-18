@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin, Divider } from "antd";
+import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin, Divider, Space } from "antd";
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AuctionCard from '../components/AuctionCard';
@@ -77,6 +77,10 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   const [isMakeOfferModalVisible, setIsMakeOfferModalVisible] = useState(false);
   const [selectedNftId, setSelectedNftId] = useState<number | null>(null);
   const [nftOffers, setNftOffers] = useState<NFTOffer>({});
+  const [selectedAuctionNftId, setSelectedAuctionNftId] = useState<number | null>(null);
+  const [isOffersModalVisible, setIsOffersModalVisible] = useState(false);
+  const [selectedNftOffers, setSelectedNftOffers] = useState<Offer[]>([]);
+  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
 
   useEffect(() => {
     const fetchNfts = async () => {
@@ -273,12 +277,8 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
         type_arguments: [],
       });
       
-      console.log('Raw offers response:', response);
-      
       // Ensure we're getting the correct data structure from the response
       const offers = Array.isArray(response[0]) ? response[0] : [];
-      
-      console.log('Processed offers:', offers);
       
       // Transform the offers to match the Offer interface
       const transformedOffers = offers.map((offer: any) => ({
@@ -288,8 +288,6 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
         expiration: Number(offer.expiration),
         status: Number(offer.status)
       }));
-
-      console.log('Transformed offers:', transformedOffers);
 
       setNftOffers(prev => ({
         ...prev,
@@ -306,9 +304,16 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
 
   useEffect(() => {
     const fetchOffers = async () => {
-      if (paginatedNfts.length > 0) {
-        const promises = paginatedNfts.map(nft => fetchOffersForNft(nft.id));
-        await Promise.all(promises);
+      if (paginatedNfts.length > 0 && !isLoadingOffers) {
+        setIsLoadingOffers(true);
+        try {
+          const promises = paginatedNfts.map(nft => fetchOffersForNFT(nft.id));
+          await Promise.all(promises);
+        } catch (error) {
+          console.error('Error fetching offers:', error);
+        } finally {
+          setIsLoadingOffers(false);
+        }
       }
     };
     
@@ -359,6 +364,95 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
     await fetchOffersForNft(nftId);
   };
 
+  const handleCreateAuction = (nftId: number) => {
+    setSelectedAuctionNftId(nftId);
+    setIsCreateAuctionModalVisible(true);
+  };
+
+  const fetchOffersForNFT = async (nftId: number) => {
+    try {
+      console.log('Fetching offers for NFT:', nftId);
+      const response = await client.view({
+        function: `${marketplaceAddr}::NFTMarketplace::get_offers_for_nft`,
+        arguments: [marketplaceAddr, nftId.toString()],
+        type_arguments: [],
+      });
+      
+      console.log('Raw offers response:', response);
+      
+      // The response should be an array of offers
+      const offers = response && Array.isArray(response[0]) ? response[0] : [];
+      
+      if (!Array.isArray(offers)) {
+        console.log('No offers found or invalid response format');
+        setSelectedNftOffers([]);
+        return;
+      }
+
+      // Transform the offers to match the Offer interface
+      const transformedOffers = offers.map((offer: any) => {
+        // Handle both possible response formats
+        const offerData = offer.data || offer;
+        
+        return {
+          nft_id: Number(offerData.nft_id || nftId),
+          buyer: offerData.buyer,
+          price: Number(offerData.price || 0) / 100000000, // Convert from octas to APT
+          expiration: Number(offerData.expiration || 0),
+          status: Number(offerData.status || 0)
+        };
+      });
+
+      console.log('Transformed offers:', transformedOffers);
+      setSelectedNftOffers(transformedOffers);
+      
+    } catch (error) {
+      console.error('Error fetching offers:', error);
+      message.error('Failed to fetch offers');
+      setSelectedNftOffers([]); // Set empty array on error
+    }
+  };
+
+  const handleViewOffers = async (nft: NFT) => {
+    setSelectedNft(nft);
+    setIsOffersModalVisible(true);
+    setIsLoadingOffers(true);
+    
+    try {
+      await fetchOffersForNFT(nft.id);
+    } catch (error) {
+      console.error('Error fetching offers:', error);
+      message.error('Failed to fetch offers');
+    } finally {
+      setIsLoadingOffers(false);
+    }
+  };
+
+  const handleBatchAccept = async (selectedOffers: { nftId: number, offerId: number }[]) => {
+    try {
+      // Process each offer sequentially to maintain order
+      for (const { nftId, offerId } of selectedOffers) {
+        const payload: InputTransactionData = {
+          data: {
+            function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
+            typeArguments: [],
+            functionArguments: [nftId.toString(), offerId.toString()]
+          }
+        };
+
+        const response = await signAndSubmitTransaction(payload);
+        await client.waitForTransaction(response.hash);
+      }
+      
+      message.success('Successfully accepted all selected offers!');
+      // Refresh the offers after batch accept
+      await fetchOffersForNFT(selectedOffers[0].nftId);
+    } catch (error) {
+      console.error('Error in batch accept:', error);
+      message.error('Failed to process batch accept');
+    }
+  };
+
   return (
     <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <Title level={2} style={{ marginBottom: "20px" }}>Marketplace</Title>
@@ -403,50 +497,79 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                   <Col key={nft.id} xs={24} sm={12} md={8} lg={6} xl={6} style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                     <Card
                       hoverable
-                      style={{ width: "100%", maxWidth: "240px", margin: "0 auto", borderRadius: "10px", boxShadow: "0 4px 8px rgba(0,0,0,0.1)" }}
-                      cover={<img alt={nft.name} src={nft.uri} style={{ borderRadius: "10px 10px 0 0" }} />}
-                      actions={[
-                        <Button key="buy" type="primary" onClick={() => handleBuyClick(nft)}>
-                          Buy
-                        </Button>,
-                        <Button 
-                          key="auction" 
-                          onClick={() => {
-                            setSelectedNftId(nft.id);
-                            setIsCreateAuctionModalVisible(true);
-                          }}
-                        >
-                          Create Auction
-                        </Button>,
-                        <Button 
-                          key="offer" 
-                          onClick={() => {
-                            setSelectedNftId(nft.id);
-                            setIsMakeOfferModalVisible(true);
-                          }}
-                        >
-                          Make Offer
-                        </Button>
-                      ]}
+                      className="nft-card"
+                      cover={
+                        <div style={{ position: "relative" }}>
+                          <img 
+                            alt={nft.name} 
+                            src={nft.uri} 
+                            className="nft-card-image"
+                          />
+                          <Tag 
+                            color={rarityColors[nft.rarity]} 
+                            style={{
+                              position: "absolute",
+                              top: "12px",
+                              right: "12px",
+                              borderRadius: "20px",
+                              padding: "4px 12px",
+                            }}
+                          >
+                            {rarityLabels[nft.rarity]}
+                          </Tag>
+                        </div>
+                      }
                     >
-                      {/* Rarity Tag */}
-                      <Tag color={rarityColors[nft.rarity]} style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "10px" }}>
-                        {rarityLabels[nft.rarity]}
-                      </Tag>
-
-                      <Meta title={nft.name} description={`Price: ${nft.price} APT`} />
-                      <p>{nft.description}</p>
-                      <p>ID: {nft.id}</p>
-                      <p>Owner: {truncateAddress(nft.owner)}</p>
-
-                      <Divider />
-                      
-                      <OffersDisplay
-                        offers={nftOffers[nft.id] || []}
-                        isOwner={account?.address === nft.owner}
-                        onAcceptOffer={handleAcceptOffer}
-                        onCancelOffer={handleCancelOffer}
-                      />
+                      <div className="nft-card-content">
+                        <Typography.Title level={4} style={{ marginBottom: "8px" }}>
+                          {nft.name}
+                        </Typography.Title>
+                        
+                        <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                          <div style={{ 
+                            display: "flex", 
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}>
+                            <Typography.Text type="secondary">Price</Typography.Text>
+                            <Typography.Text strong>{nft.price} APT</Typography.Text>
+                          </div>
+                          
+                          <div style={{ 
+                            display: "flex", 
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}>
+                            <Typography.Text type="secondary">Owner</Typography.Text>
+                            <Typography.Text copyable>{truncateAddress(nft.owner)}</Typography.Text>
+                          </div>
+                          
+                          <Divider style={{ margin: "12px 0" }} />
+                          
+                          <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                            {nft.for_sale && (
+                              <Button type="primary" onClick={() => handleBuyClick(nft)}>
+                                Buy Now
+                              </Button>
+                            )}
+                            <Button onClick={() => handleCreateAuction(nft.id)}>
+                              Create Auction
+                            </Button>
+                            <Button onClick={() => {
+                              setSelectedNftId(nft.id);
+                              setIsMakeOfferModalVisible(true);
+                            }}>
+                              Make Offer
+                            </Button>
+                            <Button 
+                              onClick={() => handleViewOffers(nft)}
+                              style={{ marginTop: '8px' }}
+                            >
+                              View Offers
+                            </Button>
+                          </Space>
+                        </Space>
+                      </div>
                     </Card>
                   </Col>
                 ))}
@@ -526,6 +649,77 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
           ))}
         </Row>
       )}
+
+      {selectedAuctionNftId && (
+        <CreateAuctionModal
+          visible={isCreateAuctionModalVisible}
+          onCancel={() => {
+            setIsCreateAuctionModalVisible(false);
+            setSelectedAuctionNftId(null);
+          }}
+          nftId={selectedAuctionNftId}
+          marketplaceAddr={marketplaceAddr}
+        />
+      )}
+
+      <Modal
+        title={`Offers for ${selectedNft?.name}`}
+        open={isOffersModalVisible}
+        onCancel={() => {
+          setIsOffersModalVisible(false);
+          setSelectedNftOffers([]);
+          setSelectedNft(null);
+        }}
+        footer={null}
+        width={800}
+      >
+        <OffersDisplay
+          offers={selectedNftOffers}
+          isOwner={selectedNft?.owner === account?.address}
+          loading={isLoadingOffers}
+          onAcceptOffer={async (nftId: number, offerId: number) => {
+            try {
+              const payload: InputTransactionData = {
+                data: {
+                  function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
+                  typeArguments: [],
+                  functionArguments: [nftId.toString(), offerId.toString()]
+                }
+              };
+
+              const response = await signAndSubmitTransaction(payload);
+              await client.waitForTransaction(response.hash);
+              message.success('Offer accepted successfully!');
+              // Refetch offers only after successful transaction
+              await fetchOffersForNFT(nftId);
+            } catch (error) {
+              console.error('Error accepting offer:', error);
+              message.error('Failed to accept offer');
+            }
+          }}
+          onCancelOffer={async (nftId: number, offerId: number) => {
+            try {
+              const payload: InputTransactionData = {
+                data: {
+                  function: `${marketplaceAddr}::NFTMarketplace::cancel_offer`,
+                  typeArguments: [],
+                  functionArguments: [nftId.toString(), offerId.toString()]
+                }
+              };
+
+              const response = await signAndSubmitTransaction(payload);
+              await client.waitForTransaction(response.hash);
+              message.success('Offer cancelled successfully!');
+              // Refetch offers only after successful transaction
+              await fetchOffersForNFT(nftId);
+            } catch (error) {
+              console.error('Error cancelling offer:', error);
+              message.error('Failed to cancel offer');
+            }
+          }}
+          onBatchAccept={handleBatchAccept}
+        />
+      </Modal>
     </div>
   );
 };
