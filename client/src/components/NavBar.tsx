@@ -74,7 +74,15 @@ const NavBar: React.FC<NavBarProps> = ({ onMintNFTClick }) => {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "32px" }}>
-      <img src="/Aptos_Primary_WHT.png" alt="Aptos Logo" style={{ height: "30px", marginRight: 16 }} />
+        <img 
+          src="/Aptos_Primary_WHT.png" 
+          alt="Aptos Logo" 
+          style={{ 
+            height: "30px", 
+            marginRight: 16,
+            filter: "brightness(0)",
+          }} 
+        />
         
         <Menu 
           mode="horizontal" 

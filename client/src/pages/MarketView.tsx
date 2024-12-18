@@ -464,8 +464,16 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
   };
 
   return (
-    <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div style={{ 
+      textAlign: "center", 
+      display: "flex", 
+      flexDirection: "column", 
+      alignItems: "center",
+      padding: "20px"
+    }}>
       <Title level={2} style={{ marginBottom: "20px" }}>Marketplace</Title>
+      
+      {/* View Mode Toggle */}
       <Radio.Group 
         value={viewMode} 
         onChange={(e) => setViewMode(e.target.value)}
@@ -475,34 +483,65 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
         <Radio.Button value="auctions">Auctions</Radio.Button>
       </Radio.Group>
 
-      {viewMode === 'marketplace' ? (
+      {viewMode === 'marketplace' && (
         <>
           {loading ? (
             <Spin size="large" />
           ) : (
             <>
-              <MarketplaceFilters onFilterChange={handleFilterChange} />
-              {/* Filter Buttons */}
-              <div style={{ marginBottom: "20px" }}>
-                <Radio.Group
-                  value={rarity}
-                  onChange={(e) => {
-                    const selectedRarity = e.target.value;
-                    setRarity(selectedRarity);
-                    handleFetchNfts(selectedRarity === 'all' ? undefined : selectedRarity);
-                  }}
-                  buttonStyle="solid"
-                >
-                  <Radio.Button value="all">All</Radio.Button>
-                  <Radio.Button value={1}>Common</Radio.Button>
-                  <Radio.Button value={2}>Uncommon</Radio.Button>
-                  <Radio.Button value={3}>Rare</Radio.Button>
-                  <Radio.Button value={4}>Super Rare</Radio.Button>
-                </Radio.Group>
+              {/* Filters Section */}
+              <div style={{ 
+                width: "100%", 
+                maxWidth: "1200px",
+                marginBottom: "30px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px"
+              }}>
+                {/* MarketplaceFilters */}
+                <div style={{ 
+                  padding: "20px",
+                  background: "#fff",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                }}>
+                  <MarketplaceFilters onFilterChange={handleFilterChange} />
+                </div>
+
+                {/* Rarity Filter Buttons */}
+                <div style={{ 
+                  padding: "15px",
+                  background: "#fff",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                }}>
+                  <Radio.Group
+                    value={rarity}
+                    onChange={(e) => {
+                      const selectedRarity = e.target.value;
+                      setRarity(selectedRarity);
+                      handleFetchNfts(selectedRarity === 'all' ? undefined : selectedRarity);
+                    }}
+                    buttonStyle="solid"
+                  >
+                    <Radio.Button value="all">All</Radio.Button>
+                    <Radio.Button value={1}>Common</Radio.Button>
+                    <Radio.Button value={2}>Uncommon</Radio.Button>
+                    <Radio.Button value={3}>Rare</Radio.Button>
+                    <Radio.Button value={4}>Super Rare</Radio.Button>
+                  </Radio.Group>
+                </div>
               </div>
 
-              {/* Card Grid */}
-              <Row gutter={[24, 24]} style={{ marginTop: 20, width: "100%", display: "flex", justifyContent: "center", flexWrap: "wrap" }}>
+              {/* NFT Cards Grid */}
+              <Row 
+                gutter={[24, 24]} 
+                style={{ 
+                  width: "100%",
+                  maxWidth: "1200px",
+                  margin: "0 auto"
+                }}
+              >
                 {paginatedNfts.map((nft) => (
                   <Col key={nft.id} xs={24} sm={12} md={8} lg={6} xl={6} style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                     <Card
@@ -641,9 +680,17 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
             </>
           )}
         </>
-      ) : (
-        // Auctions view
-        <Row gutter={[24, 24]}>
+      )}
+
+      {viewMode === 'auctions' && (
+        <Row 
+          gutter={[24, 24]}
+          style={{ 
+            width: "100%",
+            maxWidth: "1200px",
+            margin: "0 auto"
+          }}
+        >
           {activeAuctions.map((auction) => (
             <Col key={auction.nft_id} xs={24} sm={12} md={8} lg={6}>
               <AuctionCard
