@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Typography, Radio, message, Card, Row, Col, Pagination, Tag, Button, Modal, Spin, Divider, Space } from "antd";
+import { UserOutlined, TagOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { AptosClient } from "aptos";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import AuctionCard from '../components/AuctionCard';
@@ -548,11 +549,18 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                       hoverable
                       className="nft-card"
                       cover={
-                        <div style={{ position: "relative" }}>
+                        <div style={{ position: "relative", overflow: "hidden" }}>
                           <img 
                             alt={nft.name} 
                             src={nft.uri} 
-                            className="nft-card-image"
+                            style={{
+                              width: "100%",
+                              height: "300px",
+                              objectFit: "cover",
+                              transition: "transform 0.3s ease",
+                            }}
+                            onMouseOver={e => e.currentTarget.style.transform = "scale(1.05)"}
+                            onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
                           />
                           <Tag 
                             color={rarityColors[nft.rarity]} 
@@ -561,52 +569,131 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                               top: "12px",
                               right: "12px",
                               borderRadius: "12px",
+                              padding: "4px 12px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
                             }}
                           >
                             {rarityLabels[nft.rarity]}
                           </Tag>
                         </div>
                       }
-                      style={{ height: "100%" }}
+                      style={{
+                        width: "100%",
+                        borderRadius: "16px",
+                        overflow: "hidden",
+                        border: "none",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+                        transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                      }}
                       bodyStyle={{ 
-                        padding: "16px",
+                        padding: "20px",
                         display: "flex",
                         flexDirection: "column",
-                        height: "calc(100% - 300px)" // Adjust based on your image height
+                        gap: "16px",
+                        background: "linear-gradient(to bottom, #ffffff, #f8fafc)"
                       }}
                     >
                       <Meta
-                        title={nft.name}
-                        description={`Owner: ${truncateAddress(nft.owner)}`}
-                        style={{ marginBottom: "16px" }}
+                        title={
+                          <Typography.Title level={4} style={{ 
+                            margin: 0,
+                            fontSize: "18px",
+                            fontWeight: "600"
+                          }}>
+                            {nft.name}
+                          </Typography.Title>
+                        }
+                        description={
+                          <div style={{ 
+                            marginTop: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            color: "#64748b"
+                          }}>
+                            <UserOutlined style={{ fontSize: "14px" }} />
+                            {truncateAddress(nft.owner)}
+                          </div>
+                        }
                       />
+
                       <div style={{ 
-                        marginTop: "auto",
                         display: "flex",
                         flexDirection: "column",
-                        gap: "8px"
+                        gap: "12px",
+                        marginTop: "8px"
                       }}>
-                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                        <div style={{ 
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "8px"
+                        }}>
                           {nft.for_sale && (
-                            <Button type="primary" onClick={() => handleBuyClick(nft)}>
+                            <Button 
+                              type="primary"
+                              onClick={() => handleBuyClick(nft)}
+                              style={{
+                                height: "36px",
+                                borderRadius: "8px",
+                                fontWeight: "500",
+                                boxShadow: "0 2px 4px rgba(24, 144, 255, 0.2)",
+                              }}
+                            >
                               Buy Now
                             </Button>
                           )}
-                          <Button onClick={() => handleCreateAuction(nft.id)}>
+                          <Button 
+                            onClick={() => handleCreateAuction(nft.id)}
+                            style={{
+                              height: "36px",
+                              borderRadius: "8px",
+                              fontWeight: "500",
+                              borderColor: "#e2e8f0"
+                            }}
+                          >
                             Create Auction
                           </Button>
-                        </Space>
-                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                          <Button onClick={() => {
-                            setSelectedNftId(nft.id);
-                            setIsMakeOfferModalVisible(true);
-                          }}>
+                        </div>
+
+                        <div style={{ 
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "8px"
+                        }}>
+                          <Button 
+                            onClick={() => {
+                              setSelectedNftId(nft.id);
+                              setIsMakeOfferModalVisible(true);
+                            }}
+                            style={{
+                              height: "36px",
+                              borderRadius: "8px",
+                              fontWeight: "500",
+                              background: "#f1f5f9",
+                              borderColor: "transparent",
+                              color: "#475569"
+                            }}
+                            icon={<TagOutlined />}
+                          >
                             Make Offer
                           </Button>
-                          <Button onClick={() => handleViewOffers(nft)}>
+                          <Button 
+                            onClick={() => handleViewOffers(nft)}
+                            style={{
+                              height: "36px",
+                              borderRadius: "8px",
+                              fontWeight: "500",
+                              background: "#f1f5f9",
+                              borderColor: "transparent",
+                              color: "#475569"
+                            }}
+                            icon={<UnorderedListOutlined />}
+                          >
                             View Offers
                           </Button>
-                        </Space>
+                        </div>
                       </div>
                     </Card>
                   </Col>
