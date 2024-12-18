@@ -560,63 +560,52 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                               position: "absolute",
                               top: "12px",
                               right: "12px",
-                              borderRadius: "20px",
-                              padding: "4px 12px",
+                              borderRadius: "12px",
                             }}
                           >
                             {rarityLabels[nft.rarity]}
                           </Tag>
                         </div>
                       }
+                      style={{ height: "100%" }}
+                      bodyStyle={{ 
+                        padding: "16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        height: "calc(100% - 300px)" // Adjust based on your image height
+                      }}
                     >
-                      <div className="nft-card-content">
-                        <Typography.Title level={4} style={{ marginBottom: "8px" }}>
-                          {nft.name}
-                        </Typography.Title>
-                        
-                        <Space direction="vertical" size="small" style={{ width: "100%" }}>
-                          <div style={{ 
-                            display: "flex", 
-                            justifyContent: "space-between",
-                            alignItems: "center",
+                      <Meta
+                        title={nft.name}
+                        description={`Owner: ${truncateAddress(nft.owner)}`}
+                        style={{ marginBottom: "16px" }}
+                      />
+                      <div style={{ 
+                        marginTop: "auto",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px"
+                      }}>
+                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                          {nft.for_sale && (
+                            <Button type="primary" onClick={() => handleBuyClick(nft)}>
+                              Buy Now
+                            </Button>
+                          )}
+                          <Button onClick={() => handleCreateAuction(nft.id)}>
+                            Create Auction
+                          </Button>
+                        </Space>
+                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                          <Button onClick={() => {
+                            setSelectedNftId(nft.id);
+                            setIsMakeOfferModalVisible(true);
                           }}>
-                            <Typography.Text type="secondary">Price</Typography.Text>
-                            <Typography.Text strong>{nft.price} APT</Typography.Text>
-                          </div>
-                          
-                          <div style={{ 
-                            display: "flex", 
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}>
-                            <Typography.Text type="secondary">Owner</Typography.Text>
-                            <Typography.Text copyable>{truncateAddress(nft.owner)}</Typography.Text>
-                          </div>
-                          
-                          <Divider style={{ margin: "12px 0" }} />
-                          
-                          <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                            {nft.for_sale && (
-                              <Button type="primary" onClick={() => handleBuyClick(nft)}>
-                                Buy Now
-                              </Button>
-                            )}
-                            <Button onClick={() => handleCreateAuction(nft.id)}>
-                              Create Auction
-                            </Button>
-                            <Button onClick={() => {
-                              setSelectedNftId(nft.id);
-                              setIsMakeOfferModalVisible(true);
-                            }}>
-                              Make Offer
-                            </Button>
-                            <Button 
-                              onClick={() => handleViewOffers(nft)}
-                              style={{ marginTop: '8px' }}
-                            >
-                              View Offers
-                            </Button>
-                          </Space>
+                            Make Offer
+                          </Button>
+                          <Button onClick={() => handleViewOffers(nft)}>
+                            View Offers
+                          </Button>
                         </Space>
                       </div>
                     </Card>
