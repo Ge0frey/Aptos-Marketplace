@@ -326,14 +326,18 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
         data: {
           function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
           typeArguments: [],
-          functionArguments: [marketplaceAddr, nftId, offerId]
+          functionArguments: [
+            marketplaceAddr,
+            nftId.toString(),
+            offerId.toString()
+          ]
         }
       };
       
       const response = await signAndSubmitTransaction(payload);
       await client.waitForTransaction(response.hash);
       message.success('Offer accepted successfully!');
-      fetchOffersForNft(nftId);
+      await fetchOffersForNFT(nftId);
     } catch (error) {
       console.error('Error accepting offer:', error);
       message.error('Failed to accept offer');
@@ -436,7 +440,11 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
           data: {
             function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
             typeArguments: [],
-            functionArguments: [nftId.toString(), offerId.toString()]
+            functionArguments: [
+              marketplaceAddr,
+              nftId.toString(),
+              offerId.toString()
+            ]
           }
         };
 
@@ -446,7 +454,9 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
       
       message.success('Successfully accepted all selected offers!');
       // Refresh the offers after batch accept
-      await fetchOffersForNFT(selectedOffers[0].nftId);
+      if (selectedOffers.length > 0) {
+        await fetchOffersForNFT(selectedOffers[0].nftId);
+      }
     } catch (error) {
       console.error('Error in batch accept:', error);
       message.error('Failed to process batch accept');
@@ -683,40 +693,24 @@ const MarketView: React.FC<MarketViewProps> = ({ marketplaceAddr }) => {
                 data: {
                   function: `${marketplaceAddr}::NFTMarketplace::accept_offer`,
                   typeArguments: [],
-                  functionArguments: [nftId.toString(), offerId.toString()]
+                  functionArguments: [
+                    marketplaceAddr,
+                    nftId.toString(),
+                    offerId.toString()
+                  ]
                 }
               };
 
               const response = await signAndSubmitTransaction(payload);
               await client.waitForTransaction(response.hash);
               message.success('Offer accepted successfully!');
-              // Refetch offers only after successful transaction
               await fetchOffersForNFT(nftId);
             } catch (error) {
               console.error('Error accepting offer:', error);
               message.error('Failed to accept offer');
             }
           }}
-          onCancelOffer={async (nftId: number, offerId: number) => {
-            try {
-              const payload: InputTransactionData = {
-                data: {
-                  function: `${marketplaceAddr}::NFTMarketplace::cancel_offer`,
-                  typeArguments: [],
-                  functionArguments: [nftId.toString(), offerId.toString()]
-                }
-              };
-
-              const response = await signAndSubmitTransaction(payload);
-              await client.waitForTransaction(response.hash);
-              message.success('Offer cancelled successfully!');
-              // Refetch offers only after successful transaction
-              await fetchOffersForNFT(nftId);
-            } catch (error) {
-              console.error('Error cancelling offer:', error);
-              message.error('Failed to cancel offer');
-            }
-          }}
+          onCancelOffer={handleCancelOffer}
           onBatchAccept={handleBatchAccept}
         />
       </Modal>
