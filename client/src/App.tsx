@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./App.css";
+import "antd/dist/reset.css";
 import { Layout, Modal, Form, Input, Select, Button, message } from "antd";
 import NavBar from "./components/NavBar";
 import MarketView from "./pages/MarketView";
